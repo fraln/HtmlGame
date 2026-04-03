@@ -1,0 +1,13 @@
+import pluginVue from 'eslint-plugin-vue'
+import {
+  defineConfigWithVueTs,
+  vueTsConfigs,
+} from '@vue/eslint-config-typescript'
+
+export default [
+  { ignores: ['dist/**', 'node_modules/**'] },
+  ...defineConfigWithVueTs(
+    pluginVue.configs['flat/essential'],
+    vueTsConfigs.recommended,
+  ),
+]
