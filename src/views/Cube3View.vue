@@ -72,13 +72,7 @@ function onScramble() {
           <div class="manual-body">
             <section>
               <h4 class="manual-h">视角</h4>
-              <p>在左侧画布上按住鼠标拖拽，可环绕观察魔方。</p>
-            </section>
-            <section>
-              <h4 class="manual-h">3×3 说明</h4>
-              <p>
-                每层 3×3 共 9 个小块一起转动，记号与 2×2 相同（U/D/F/B/L/R 与顺逆）。随机打乱默认步数较多。
-              </p>
+              <p>在左侧视图上按住鼠标拖拽，观察魔方。</p>
             </section>
             <section>
               <h4 class="manual-h">六面称呼与记号</h4>
