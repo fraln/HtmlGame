@@ -35,6 +35,11 @@ const router = createRouter({
       path: '/cube3',
       redirect: '/cube/3x3',
     },
+    {
+      path: '/tetris',
+      name: 'tetris',
+      component: () => import('../views/TetrisView.vue'),
+    },
   ],
 })
 

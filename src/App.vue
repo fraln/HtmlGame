@@ -16,6 +16,7 @@ const headerActive = computed(() =>
       <el-menu mode="horizontal" router :default-active="headerActive">
         <el-menu-item index="/">首页</el-menu-item>
         <el-menu-item index="/cube">魔方</el-menu-item>
+        <el-menu-item index="/tetris">俄罗斯方块</el-menu-item>
         <el-menu-item index="/about">关于</el-menu-item>
       </el-menu>
     </el-header>
