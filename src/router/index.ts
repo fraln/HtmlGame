@@ -40,6 +40,11 @@ const router = createRouter({
       name: 'tetris',
       component: () => import('../views/TetrisView.vue'),
     },
+    {
+      path: '/2048',
+      name: 'game2048',
+      component: () => import('../views/Game2048View.vue'),
+    },
   ],
 })
 
