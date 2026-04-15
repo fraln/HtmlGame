@@ -45,6 +45,11 @@ const router = createRouter({
       name: 'game2048',
       component: () => import('../views/Game2048View.vue'),
     },
+    {
+      path: '/flappy',
+      name: 'flappy',
+      component: () => import('../views/FlappyBirdView.vue'),
+    },
   ],
 })
 
