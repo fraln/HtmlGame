@@ -136,6 +136,11 @@ const over = ref(false)
 const moving = ref(false)
 const history = ref<Snapshot | null>(null)
 
+// 输入队列：解决动画期间连续操作被丢弃的问题
+const inputQueue = ref<Dir[]>([])
+let draining = false
+const MAX_QUEUE = 8
+
 let idSeq = 1
 function nextId() {
   return idSeq++
@@ -163,6 +168,8 @@ function reset() {
   won.value = false
   over.value = false
   moving.value = false
+  inputQueue.value = []
+  draining = false
   history.value = null
   animSpawnIds.value = new Set()
   animMergeIds.value = new Set()
@@ -185,13 +192,14 @@ function tryUndo() {
   won.value = history.value.won
   over.value = history.value.over
   history.value = null
+  inputQueue.value = []
+  draining = false
   animSpawnIds.value = new Set()
   animMergeIds.value = new Set()
 }
 
 async function step(dir: Dir) {
-  if (over.value || moving.value) return
-
+  if (over.value) return
   const plan = planMove(tiles.value, dir)
   if (!plan.moved) return
 
@@ -220,6 +228,33 @@ async function step(dir: Dir) {
   moving.value = false
 }
 
+function requestMove(dir: Dir) {
+  if (over.value) return
+  // 若当前在移动/消费队列中，把输入缓存起来
+  if (moving.value || draining) {
+    if (inputQueue.value.length >= MAX_QUEUE) inputQueue.value.shift()
+    inputQueue.value.push(dir)
+    if (!draining) void drainQueue()
+    return
+  }
+  // 空闲时直接执行，并在执行结束后顺带消费队列
+  inputQueue.value.push(dir)
+  void drainQueue()
+}
+
+async function drainQueue() {
+  if (draining) return
+  draining = true
+  try {
+    while (!over.value && inputQueue.value.length > 0) {
+      const dir = inputQueue.value.shift()!
+      await step(dir)
+    }
+  } finally {
+    draining = false
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key.startsWith('Arrow')) e.preventDefault()
   if (e.key === 'r' || e.key === 'R') {
@@ -232,16 +267,16 @@ function onKeydown(e: KeyboardEvent) {
   }
   switch (e.key) {
     case 'ArrowLeft':
-      void step('left')
+      requestMove('left')
       break
     case 'ArrowRight':
-      void step('right')
+      requestMove('right')
       break
     case 'ArrowUp':
-      void step('up')
+      requestMove('up')
       break
     case 'ArrowDown':
-      void step('down')
+      requestMove('down')
       break
     default:
       break
@@ -307,7 +342,7 @@ function measureBoard() {
 let swipeActive: { x: number; y: number; pid: number } | null = null
 
 function onBoardPointerDown(e: PointerEvent) {
-  if (moving.value || over.value) return
+  if (over.value) return
   swipeActive = { x: e.clientX, y: e.clientY, pid: e.pointerId }
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
 }
@@ -316,15 +351,15 @@ function finishSwipe(e: PointerEvent) {
   const s = swipeActive
   if (!s || s.pid !== e.pointerId) return
   swipeActive = null
-  if (moving.value || over.value) return
+  if (over.value) return
   const dx = e.clientX - s.x
   const dy = e.clientY - s.y
   const t = 28
   if (Math.abs(dx) < t && Math.abs(dy) < t) return
   if (Math.abs(dx) >= Math.abs(dy)) {
-    void step(dx > 0 ? 'right' : 'left')
+    requestMove(dx > 0 ? 'right' : 'left')
   } else {
-    void step(dy > 0 ? 'down' : 'up')
+    requestMove(dy > 0 ? 'down' : 'up')
   }
 }
 
