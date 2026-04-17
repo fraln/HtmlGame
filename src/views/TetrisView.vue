@@ -442,6 +442,7 @@ function touchPause() {
 /** 棋盘触摸：横向拖移实时对齐列；下滑按住持续软降；松手时短横移可判定纵向滑（软降/顺旋） */
 const SWIPE_MIN_PX = 28
 const SOFT_DROP_REPEAT_MS = 50
+const ROTATE_REPEAT_MS = 160
 
 let boardTouch: {
   x0: number
@@ -451,14 +452,24 @@ let boardTouch: {
   cellW: number
   /** 本次按下是否已启动过「按住软降」定时器（用于松手时避免再补一次一步） */
   softDropRepeatStarted: boolean
+  /** 本次按下是否已启动过「按住上滑持续旋转」定时器 */
+  rotateRepeatStarted: boolean
 } | null = null
 
 let softDropRepeatTimer: ReturnType<typeof setInterval> | null = null
+let rotateRepeatTimer: ReturnType<typeof setInterval> | null = null
 
 function stopSoftDropRepeat() {
   if (softDropRepeatTimer) {
     clearInterval(softDropRepeatTimer)
     softDropRepeatTimer = null
+  }
+}
+
+function stopRotateRepeat() {
+  if (rotateRepeatTimer) {
+    clearInterval(rotateRepeatTimer)
+    rotateRepeatTimer = null
   }
 }
 
@@ -474,6 +485,20 @@ function ensureSoftDropRepeat(s: NonNullable<typeof boardTouch>) {
     }
     touchSoftDrop()
   }, SOFT_DROP_REPEAT_MS)
+}
+
+/** 上滑超过阈值且以纵向为主时，按住期间持续顺时针旋转 */
+function ensureRotateRepeat(s: NonNullable<typeof boardTouch>) {
+  if (rotateRepeatTimer) return
+  s.rotateRepeatStarted = true
+  tryRotate()
+  rotateRepeatTimer = setInterval(() => {
+    if (state.value !== 'playing' || !boardTouch) {
+      stopRotateRepeat()
+      return
+    }
+    tryRotate()
+  }, ROTATE_REPEAT_MS)
 }
 
 function getCellWidthPx(boardEl: HTMLElement): number {
@@ -509,6 +534,7 @@ function onBoardPointerDown(e: PointerEvent) {
     pid: e.pointerId,
     cellW: getCellWidthPx(el),
     softDropRepeatStarted: false,
+    rotateRepeatStarted: false,
   }
   el.setPointerCapture(e.pointerId)
 }
@@ -531,12 +557,20 @@ function onBoardPointerMove(e: PointerEvent) {
   } else {
     stopSoftDropRepeat()
   }
+  // 上滑按住：持续旋转；手势不再满足时停止
+  const wantRotateHold = dy < -SWIPE_MIN_PX && ady >= adx
+  if (wantRotateHold) {
+    ensureRotateRepeat(s)
+  } else {
+    stopRotateRepeat()
+  }
 }
 
 function onBoardPointerFinish(e: PointerEvent) {
   const s = boardTouch
   if (!s || s.pid !== e.pointerId) return
   stopSoftDropRepeat()
+  stopRotateRepeat()
   boardTouch = null
   const el = e.currentTarget as HTMLElement
   if (el.hasPointerCapture?.(e.pointerId)) {
@@ -555,7 +589,9 @@ function onBoardPointerFinish(e: PointerEvent) {
         tryMove(0, 1)
       }
     } else {
-      tryRotate()
+      if (!s.rotateRepeatStarted) {
+        tryRotate()
+      }
     }
   }
 }
@@ -681,6 +717,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   if (dropTimer) clearInterval(dropTimer)
   stopSoftDropRepeat()
+  stopRotateRepeat()
 })
 </script>
 
