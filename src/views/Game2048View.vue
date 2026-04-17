@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 const SIZE = 4
 const STORAGE_KEY = 'htmlgame:2048:best'
 const ANIM_MS = 140
-const DESKTOP_STEP = 82 // 72 + 10
-const MOBILE_STEP = 70 // 60 + 10
+/** 格子间隙（与 CSS gap 一致） */
+const GAP = 10
+/** 棋盘内边距（与 .board padding 一致） */
+const BOARD_PAD = 14
 
 type Dir = 'left' | 'right' | 'up' | 'down'
 type Pos = { r: number; c: number }
@@ -270,22 +272,77 @@ const statusText = computed(() => {
 })
 
 const bgCells = computed(() => Array.from({ length: SIZE * SIZE }, (_, i) => i))
-const stepPx = ref(DESKTOP_STEP)
 
-function updateStep() {
-  stepPx.value = window.matchMedia('(max-width: 480px)').matches ? MOBILE_STEP : DESKTOP_STEP
+const boardRef = ref<HTMLElement | null>(null)
+const cellSize = ref(72)
+/** 与 .bg 的 gap 同步（移动端可能为 vw） */
+const gapPx = ref(GAP)
+const stepPx = computed(() => cellSize.value + gapPx.value)
+
+const numFontPx = computed(() =>
+  Math.max(14, Math.min(22, Math.round(cellSize.value * 0.31))),
+)
+
+let resizeObserver: ResizeObserver | null = null
+
+function measureBoard() {
+  const el = boardRef.value
+  if (!el) return
+  const pad = parseFloat(getComputedStyle(el).paddingLeft) || BOARD_PAD
+  const bgEl = el.querySelector('.bg')
+  let gap = GAP
+  if (bgEl) {
+    const g = getComputedStyle(bgEl).gap
+    const parsed = parseFloat(g.split(/\s+/)[0] ?? '')
+    gap = Number.isFinite(parsed) ? parsed : GAP
+  }
+  gapPx.value = gap
+  const inner = el.clientWidth - 2 * pad
+  if (inner <= 0) return
+  const cell = Math.max(40, (inner - 3 * gap) / 4)
+  cellSize.value = cell
 }
 
-onMounted(() => {
+/** 滑动起点（非响应式，避免无意义重渲染） */
+let swipeActive: { x: number; y: number; pid: number } | null = null
+
+function onBoardPointerDown(e: PointerEvent) {
+  if (moving.value || over.value) return
+  swipeActive = { x: e.clientX, y: e.clientY, pid: e.pointerId }
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function finishSwipe(e: PointerEvent) {
+  const s = swipeActive
+  if (!s || s.pid !== e.pointerId) return
+  swipeActive = null
+  if (moving.value || over.value) return
+  const dx = e.clientX - s.x
+  const dy = e.clientY - s.y
+  const t = 28
+  if (Math.abs(dx) < t && Math.abs(dy) < t) return
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    void step(dx > 0 ? 'right' : 'left')
+  } else {
+    void step(dy > 0 ? 'down' : 'up')
+  }
+}
+
+onMounted(async () => {
   loadBest()
   reset()
-  updateStep()
-  window.addEventListener('resize', updateStep)
+  await nextTick()
+  measureBoard()
+  if (boardRef.value) {
+    resizeObserver = new ResizeObserver(() => measureBoard())
+    resizeObserver.observe(boardRef.value)
+  }
   window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateStep)
+  resizeObserver?.disconnect()
+  resizeObserver = null
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
@@ -304,8 +361,22 @@ onUnmounted(() => {
 
       <div class="layout">
         <section class="board-wrap">
-          <div class="board" role="grid" aria-label="2048 棋盘">
-            <div class="bg">
+          <div
+            ref="boardRef"
+            class="board"
+            role="grid"
+            aria-label="2048 棋盘"
+            @pointerdown="onBoardPointerDown"
+            @pointerup="finishSwipe"
+            @pointercancel="finishSwipe"
+          >
+            <div
+              class="bg"
+              :style="{
+                gridTemplateColumns: `repeat(4, ${cellSize}px)`,
+                gridTemplateRows: `repeat(4, ${cellSize}px)`,
+              }"
+            >
               <div v-for="i in bgCells" :key="i" class="bg-cell" />
             </div>
             <div class="tiles">
@@ -313,7 +384,11 @@ onUnmounted(() => {
                 v-for="t in tiles"
                 :key="t.id"
                 class="tile"
-                :style="{ transform: `translate(${t.c * stepPx}px, ${t.r * stepPx}px)` }"
+                :style="{
+                  width: `${cellSize}px`,
+                  height: `${cellSize}px`,
+                  transform: `translate(${t.c * stepPx}px, ${t.r * stepPx}px)`,
+                }"
               >
                 <div
                   class="tile-inner"
@@ -323,7 +398,7 @@ onUnmounted(() => {
                     isMerge(t.id) ? 'anim-merge' : '',
                   ]"
                 >
-                  <span class="num">{{ t.v }}</span>
+                  <span class="num" :style="{ fontSize: `${numFontPx}px` }">{{ t.v }}</span>
                 </div>
               </div>
             </div>
@@ -345,7 +420,7 @@ onUnmounted(() => {
             <el-button :disabled="!history" @click="tryUndo">撤销 (U)</el-button>
           </div>
 
-          <p class="hint">方向键移动。相同数字相撞会合并并加分。</p>
+          <p class="hint">方向键或棋盘区滑动手势移动。相同数字相撞会合并并加分。</p>
           <p class="hint">提示：合并后会随机生成 2（90%）或 4（10%）。</p>
         </aside>
       </div>
@@ -355,9 +430,10 @@ onUnmounted(() => {
 
 <style scoped>
 .page {
-  max-width: 720px;
+  max-width: min(96vw, 720px);
   margin: 0 auto;
   text-align: left;
+  box-sizing: border-box;
 }
 
 .header {
@@ -370,26 +446,34 @@ onUnmounted(() => {
 .layout {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: clamp(16px, 4vw, 24px);
   align-items: flex-start;
   justify-content: center;
 }
 
+.board-wrap {
+  width: 100%;
+  max-width: min(360px, calc(100vw - 48px));
+  margin: 0 auto;
+}
+
 .board {
   position: relative;
-  width: 342px;
-  height: 342px;
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  box-sizing: border-box;
   padding: 14px;
   border-radius: 12px;
   background: var(--code-bg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
+  touch-action: none;
+  user-select: none;
 }
 
 .bg {
   display: grid;
-  grid-template-columns: repeat(4, 72px);
-  grid-template-rows: repeat(4, 72px);
   gap: 10px;
   position: absolute;
   inset: 14px;
@@ -406,8 +490,6 @@ onUnmounted(() => {
 }
 
 .tile {
-  width: 72px;
-  height: 72px;
   border-radius: 10px;
   position: absolute;
   top: 0;
@@ -528,21 +610,54 @@ onUnmounted(() => {
 .t1024 .num,
 .t2048 .num {
   color: #111827;
-  font-size: 20px;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 768px) {
+  .header {
+    gap: clamp(8px, 2.5vw, 14px);
+  }
+
+  .board-wrap {
+    max-width: var(--game-max-w, min(92vw, 360px));
+  }
+
   .board {
-    width: 294px;
-    height: 294px;
+    padding: clamp(10px, 3.2vw, 14px);
+    border-radius: clamp(10px, 2.8vw, 12px);
   }
+
+  .bg,
+  .tiles {
+    inset: clamp(10px, 3.2vw, 14px);
+  }
+
   .bg {
-    grid-template-columns: repeat(4, 60px);
-    grid-template-rows: repeat(4, 60px);
+    gap: clamp(6px, 2.4vw, 10px);
   }
-  .tile {
-    width: 60px;
-    height: 60px;
+
+  .layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .side {
+    min-width: 0;
+    width: 100%;
+    max-width: var(--game-max-w, min(92vw, 360px));
+    margin: 0 auto;
+  }
+
+  .stat .label {
+    font-size: clamp(13px, 3.6vw, 14px);
+  }
+
+  .stat .value {
+    font-size: clamp(16px, 4.5vw, 20px);
+  }
+
+  .hint {
+    max-width: none;
+    font-size: clamp(12px, 3.4vw, 14px);
   }
 }
 </style>

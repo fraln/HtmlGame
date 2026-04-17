@@ -315,7 +315,7 @@ onUnmounted(() => {
       </template>
 
       <div class="wrap">
-        <canvas ref="canvasRef" class="canvas" />
+        <canvas ref="canvasRef" class="canvas" width="360" height="560" />
         <div class="actions">
           <el-button type="primary" @click="jump">
             {{ state === 'playing' ? '跳跃' : state === 'gameover' ? '再来一局' : '开始' }}
@@ -330,46 +330,87 @@ onUnmounted(() => {
 
 <style scoped>
 .page {
-  max-width: 720px;
+  width: 100%;
+  max-width: min(96vw, 720px);
   margin: 0 auto;
   text-align: left;
+  box-sizing: border-box;
+}
+
+.card {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card :deep(.el-card__body) {
+  box-sizing: border-box;
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: clamp(8px, 2.5vw, 14px);
+  flex-wrap: wrap;
 }
 
 .wrap {
   display: grid;
-  gap: 12px;
-  justify-items: center;
+  width: 100%;
+  max-width: 100%;
+  gap: clamp(10px, 3vw, 14px);
+  justify-items: stretch;
+  align-items: center;
+  padding-bottom: max(clamp(10px, 3vw, 14px), env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
+/* 宽度相对父级，不用 vw，避免大于卡片内容区导致右侧溢出裁切 */
 .canvas {
-  width: min(360px, 92vw);
+  width: 100%;
+  max-width: 360px;
+  height: auto;
   aspect-ratio: 360 / 560;
-  border-radius: 12px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: clamp(10px, 2.8vw, 12px);
   border: 1px solid var(--border);
   background: var(--code-bg);
   box-shadow: var(--shadow);
-  touch-action: manipulation;
+  touch-action: none;
+  box-sizing: border-box;
 }
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: clamp(8px, 2.5vw, 12px);
   flex-wrap: wrap;
   justify-content: center;
+  width: 100%;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+.actions :deep(.el-button) {
+  min-height: 44px;
+  touch-action: manipulation;
 }
 
 .hint {
   margin: 0;
-  font-size: 13px;
+  width: 100%;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  font-size: clamp(12px, 3.4vw, 14px);
   line-height: 1.45;
   color: var(--text);
+  box-sizing: border-box;
 }
 </style>
 

@@ -313,7 +313,10 @@ function clearLines(b: number[][]): { board: number[][]; cleared: number } {
   return { board: rest, cleared }
 }
 
-const LINE_SCORE = [0, 100, 300, 500, 800]
+/** 一次消除 n 行：(100×n)×n，如 1 行 100×1，2 行 200×2 */
+function lineClearScore(cleared: number) {
+  return 100 * cleared * cleared
+}
 
 function spawnNext(): boolean {
   const id = nextId.value
@@ -371,8 +374,7 @@ function lockPiece() {
   board.value = b
   if (cleared > 0) {
     linesTotal.value += cleared
-    const mult = levelFromScore(score.value)
-    score.value += LINE_SCORE[cleared] * mult
+    score.value += lineClearScore(cleared)
   }
   if (!spawnNext()) {
     state.value = 'gameover'
@@ -410,12 +412,159 @@ function tryRotate() {
   }
 }
 
+function tryRotateCcw() {
+  if (state.value !== 'playing' || !current.value) return
+  const cur = current.value
+  const newRot = (cur.rot + 3) % 4
+  const kicks = [0, -1, 1, -2, 2]
+  for (const k of kicks) {
+    if (!collides(cur.id, newRot, cur.x + k, cur.y, board.value)) {
+      cur.x += k
+      cur.rot = newRot
+      return
+    }
+  }
+}
+
+function touchLeft() {
+  tryMove(-1, 0)
+}
+function touchRight() {
+  tryMove(1, 0)
+}
+function touchSoftDrop() {
+  tryMove(0, 1)
+}
+function touchPause() {
+  if (state.value === 'playing' || state.value === 'paused') togglePause()
+}
+
+/** 棋盘触摸：横向拖移实时对齐列；下滑按住持续软降；松手时短横移可判定纵向滑（软降/顺旋） */
+const SWIPE_MIN_PX = 28
+const SOFT_DROP_REPEAT_MS = 50
+
+let boardTouch: {
+  x0: number
+  y0: number
+  pieceX0: number
+  pid: number
+  cellW: number
+  /** 本次按下是否已启动过「按住软降」定时器（用于松手时避免再补一次一步） */
+  softDropRepeatStarted: boolean
+} | null = null
+
+let softDropRepeatTimer: ReturnType<typeof setInterval> | null = null
+
+function stopSoftDropRepeat() {
+  if (softDropRepeatTimer) {
+    clearInterval(softDropRepeatTimer)
+    softDropRepeatTimer = null
+  }
+}
+
+/** 下滑超过阈值且以纵向为主时，按住期间持续软降 */
+function ensureSoftDropRepeat(s: NonNullable<typeof boardTouch>) {
+  if (softDropRepeatTimer) return
+  s.softDropRepeatStarted = true
+  touchSoftDrop()
+  softDropRepeatTimer = setInterval(() => {
+    if (state.value !== 'playing' || !boardTouch) {
+      stopSoftDropRepeat()
+      return
+    }
+    touchSoftDrop()
+  }, SOFT_DROP_REPEAT_MS)
+}
+
+function getCellWidthPx(boardEl: HTMLElement): number {
+  const cell = boardEl.querySelector('.cell')
+  if (cell) {
+    const w = cell.getBoundingClientRect().width
+    if (w > 1) return w
+  }
+  return 26
+}
+
+/** 将活动方块尽量移到目标列（遇障碍则停） */
+function movePieceToColumn(targetX: number) {
+  if (state.value !== 'playing' || !current.value) return
+  const cur = current.value
+  let guard = 0
+  while (cur.x < targetX && guard++ < COLS + 4) {
+    if (!tryMove(1, 0)) break
+  }
+  guard = 0
+  while (cur.x > targetX && guard++ < COLS + 4) {
+    if (!tryMove(-1, 0)) break
+  }
+}
+
+function onBoardPointerDown(e: PointerEvent) {
+  if (state.value !== 'playing' || !current.value) return
+  const el = e.currentTarget as HTMLElement
+  boardTouch = {
+    x0: e.clientX,
+    y0: e.clientY,
+    pieceX0: current.value.x,
+    pid: e.pointerId,
+    cellW: getCellWidthPx(el),
+    softDropRepeatStarted: false,
+  }
+  el.setPointerCapture(e.pointerId)
+}
+
+function onBoardPointerMove(e: PointerEvent) {
+  const s = boardTouch
+  if (!s || s.pid !== e.pointerId) return
+  if (state.value !== 'playing') return
+  e.preventDefault()
+  const dx = e.clientX - s.x0
+  const dy = e.clientY - s.y0
+  const adx = Math.abs(dx)
+  const ady = Math.abs(dy)
+  const targetCol = s.pieceX0 + Math.round(dx / s.cellW)
+  movePieceToColumn(targetCol)
+  // 下滑按住：持续软降；手势不再满足时停止
+  const wantSoftHold = dy > SWIPE_MIN_PX && ady >= adx
+  if (wantSoftHold) {
+    ensureSoftDropRepeat(s)
+  } else {
+    stopSoftDropRepeat()
+  }
+}
+
+function onBoardPointerFinish(e: PointerEvent) {
+  const s = boardTouch
+  if (!s || s.pid !== e.pointerId) return
+  stopSoftDropRepeat()
+  boardTouch = null
+  const el = e.currentTarget as HTMLElement
+  if (el.hasPointerCapture?.(e.pointerId)) {
+    el.releasePointerCapture(e.pointerId)
+  }
+  if (state.value !== 'playing') return
+  const dx = e.clientX - s.x0
+  const dy = e.clientY - s.y0
+  const adx = Math.abs(dx)
+  const ady = Math.abs(dy)
+  // 横向拖移已在 move 中处理；按住软降已在定时器中处理
+  // 此处仅识别「以纵向为主」的短划（快速一划即抬起、未进入按住逻辑时）
+  if (adx < SWIPE_MIN_PX && ady >= SWIPE_MIN_PX && ady > adx) {
+    if (dy > 0) {
+      if (!s.softDropRepeatStarted) {
+        tryMove(0, 1)
+      }
+    } else {
+      tryRotate()
+    }
+  }
+}
+
 function hardDrop() {
   if (state.value !== 'playing' || !current.value) return
   const cur = current.value
   while (!collides(cur.id, cur.rot, cur.x, cur.y + 1, board.value)) {
     cur.y++
-    score.value += 2
   }
   lockPiece()
 }
@@ -505,7 +654,7 @@ function onKeydown(e: KeyboardEvent) {
       tryMove(1, 0)
       break
     case 'ArrowDown':
-      if (tryMove(0, 1)) score.value += 1
+      tryMove(0, 1)
       break
     case 'ArrowUp':
     case 'x':
@@ -514,18 +663,7 @@ function onKeydown(e: KeyboardEvent) {
       break
     case 'z':
     case 'Z':
-      if (current.value) {
-        const cur = current.value
-        const newRot = (cur.rot + 3) % 4
-        const kicks = [0, -1, 1, -2, 2]
-        for (const k of kicks) {
-          if (!collides(cur.id, newRot, cur.x + k, cur.y, board.value)) {
-            cur.x += k
-            cur.rot = newRot
-            break
-          }
-        }
-      }
+      tryRotateCcw()
       break
     case ' ':
       hardDrop()
@@ -542,6 +680,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   if (dropTimer) clearInterval(dropTimer)
+  stopSoftDropRepeat()
 })
 </script>
 
@@ -557,6 +696,11 @@ onUnmounted(() => {
           role="grid"
           :aria-rowcount="VISIBLE_ROWS"
           :aria-colcount="COLS"
+          aria-label="游戏区，滑动操作方块"
+          @pointerdown="onBoardPointerDown"
+          @pointermove="onBoardPointerMove"
+          @pointerup="onBoardPointerFinish"
+          @pointercancel="onBoardPointerFinish"
         >
           <div
             v-for="(row, ri) in displayCells"
@@ -634,12 +778,68 @@ onUnmounted(() => {
             </el-button>
           </div>
           <p class="hint">
-            ← → 移动 · ↓ 软降 · ↑ / X 顺时针<br>
-             · Z 逆时针 · 空格硬降 · P 暂停
+            计分：仅消行加分，一次消 n 行为 100×n×n 分（如 1 行 100、2 行 400）。<br>
+            键盘：← → 移动 · ↓ 软降 · ↑/X 顺旋 · Z 逆旋 · 空格硬降 · P 暂停<br>
+            <span class="hint-touch">手机：棋盘上<strong>按住横向拖动</strong>左右移动；<strong>按住下滑</strong>持续软降；<strong>轻划</strong>↑顺旋 / ↓一步；下方亦可点按</span>
           </p>
           <p v-if="state === 'paused'" class="overlay-msg">已暂停</p>
           <p v-if="state === 'gameover'" class="overlay-msg bad">游戏结束</p>
         </aside>
+      </div>
+
+      <div class="touch-controls" aria-label="触控操作">
+        <div class="touch-grid">
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="touchLeft"
+          >
+            左
+          </el-button>
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="tryRotate"
+          >
+            顺旋
+          </el-button>
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="touchRight"
+          >
+            右
+          </el-button>
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="touchSoftDrop"
+          >
+            软降
+          </el-button>
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="hardDrop"
+          >
+            硬降
+          </el-button>
+          <el-button
+            class="touch-btn"
+            :disabled="state !== 'playing'"
+            @click="tryRotateCcw"
+          >
+            逆旋
+          </el-button>
+        </div>
+        <el-button
+          v-if="state === 'playing' || state === 'paused'"
+          class="touch-pause"
+          block
+          @click="touchPause"
+        >
+          {{ state === 'paused' ? '继续' : '暂停' }}
+        </el-button>
       </div>
     </el-card>
   </div>
@@ -647,9 +847,10 @@ onUnmounted(() => {
 
 <style scoped>
 .tetris-page {
-  max-width: 720px;
+  max-width: min(96vw, 720px);
   margin: 0 auto;
   text-align: left;
+  box-sizing: border-box;
 }
 
 .card {
@@ -659,7 +860,7 @@ onUnmounted(() => {
 .layout {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: clamp(16px, 4vw, 24px);
   align-items: flex-start;
   justify-content: center;
 }
@@ -673,6 +874,8 @@ onUnmounted(() => {
   background: var(--code-bg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
+  touch-action: none;
+  user-select: none;
 }
 
 .row {
@@ -820,10 +1023,109 @@ onUnmounted(() => {
   color: #f87171;
 }
 
-@media (max-width: 600px) {
+.touch-controls {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  touch-action: manipulation;
+}
+
+.touch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(6px, 2.2vw, 10px);
+  max-width: min(92vw, 420px);
+  margin: 0 auto;
+}
+
+.touch-btn {
+  min-height: clamp(40px, 11vw, 48px);
+  touch-action: manipulation;
+  font-size: clamp(13px, 3.8vw, 15px);
+}
+
+.touch-pause {
+  margin-top: clamp(8px, 2.2vw, 12px);
+  max-width: min(92vw, 420px);
+  margin-left: auto;
+  margin-right: auto;
+  min-height: clamp(40px, 11vw, 48px);
+  touch-action: manipulation;
+}
+
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .board {
+    align-self: center;
+    padding: clamp(8px, 2.5vw, 12px);
+    gap: clamp(2px, 0.55vw, 2px);
+    border-radius: clamp(6px, 2vw, 8px);
+    /* 窄屏以棋盘滑动为主，隐藏下方虚拟键矩阵 */
+  }
+
+  .touch-controls .touch-grid {
+    display: none;
+  }
+
+  .touch-controls {
+    margin-top: clamp(8px, 2.5vw, 12px);
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .row {
+    gap: clamp(2px, 0.55vw, 2px);
+  }
+
   .cell {
-    width: 22px;
-    height: 22px;
+    width: clamp(16px, 5.5vw, 26px);
+    height: clamp(16px, 5.5vw, 26px);
+    border-radius: clamp(2px, 0.8vw, 3px);
+  }
+
+  .side {
+    min-width: 0;
+    width: 100%;
+    max-width: min(92vw, 420px);
+    margin: 0 auto;
+    gap: clamp(10px, 3vw, 14px);
+  }
+
+  .stat .label {
+    font-size: clamp(13px, 3.6vw, 14px);
+  }
+
+  .stat .value {
+    font-size: clamp(16px, 4.5vw, 20px);
+  }
+
+  .next-level-hint {
+    font-size: clamp(12px, 3.4vw, 14px);
+  }
+
+  .next-grid {
+    width: clamp(88px, 24vw, 104px);
+    height: clamp(88px, 24vw, 104px);
+    padding: clamp(6px, 2vw, 8px);
+    gap: clamp(2px, 0.6vw, 2px);
+  }
+
+  .hint {
+    max-width: none;
+    font-size: clamp(12px, 3.4vw, 14px);
+  }
+
+  .touch-controls {
+    margin-top: clamp(12px, 3.5vw, 16px);
+    padding-top: clamp(10px, 3vw, 14px);
+  }
+
+  .touch-grid {
+    max-width: min(96vw, 420px);
   }
 }
 </style>

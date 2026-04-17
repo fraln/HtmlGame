@@ -27,13 +27,20 @@ const subActive = computed(() => route.path)
 
 <style scoped>
 .cube-layout {
-  max-width: 1200px;
+  max-width: min(96vw, 1200px);
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .cube-subnav {
-  margin-bottom: 12px;
+  margin-bottom: clamp(8px, 2.5vw, 12px);
   border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+@media (max-width: 768px) {
+  .cube-layout {
+    padding-inline: clamp(0px, 1vw, 8px);
+  }
 }
 
 .sub-menu {

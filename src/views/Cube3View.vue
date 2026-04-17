@@ -201,4 +201,33 @@ function onScramble() {
   background: var(--el-fill-color-light);
   font-size: 12px;
 }
+
+@media (max-width: 768px) {
+  .page {
+    max-width: min(96vw, 1160px);
+  }
+
+  .layout {
+    gap: clamp(12px, 3.5vw, 20px);
+  }
+
+  .toolbar {
+    gap: clamp(6px, 2vw, 10px);
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: min(92vw, 560px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .controls {
+    gap: clamp(8px, 2.5vw, 16px);
+  }
+
+  .manual-body {
+    font-size: clamp(12px, 3.4vw, 14px);
+  }
+}
 </style>

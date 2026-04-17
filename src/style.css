@@ -30,6 +30,24 @@
   }
 }
 
+/* 窄屏：主要尺寸用 vw 比例（配合 clamp 限制上下限，避免横屏/大屏失控） */
+@media (max-width: 768px) {
+  :root {
+    --game-max-w: min(92vw, 360px);
+    --page-pad-inline: max(2.5vw, env(safe-area-inset-left));
+    --m-spacing: clamp(8px, 3vw, 20px);
+    --m-gap: clamp(6px, 2.2vw, 14px);
+    --m-radius: clamp(8px, 2.4vw, 12px);
+    --m-touch-min: clamp(40px, 11vw, 52px);
+    font-size: clamp(14px, 4vw, 17px);
+  }
+
+  #app {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;
@@ -166,6 +184,9 @@ code {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #center {
