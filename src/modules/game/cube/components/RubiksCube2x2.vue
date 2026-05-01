@@ -3,13 +3,13 @@ import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { CUBE_FACE_COLORS, CUBE_INNER_COLOR } from '../constants/cubeFaceColors'
+import { CUBE_FACE_COLORS, CUBE_INNER_COLOR } from '../../../../constants/cubeFaceColors'
 import {
   disposeStickerTextureCache,
   getStickerTexture,
   makeInnerPlasticMaterial,
   makeStickerMaterial,
-} from '../utils/cubeStickers'
+} from '../../../../utils/cubeStickers'
 
 const containerRef = ref<HTMLDivElement | null>(null)
 

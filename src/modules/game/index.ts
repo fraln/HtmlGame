@@ -1,0 +1,6 @@
+export * from './routes'
+export * from './cube'
+export * from './tetris'
+export * from './game2048'
+export * from './flappy'
+export * from './sokoban'
