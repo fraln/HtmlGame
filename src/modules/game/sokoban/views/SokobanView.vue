@@ -1,53 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { SOKOBAN_LEVELS, type SokobanLevel } from '../levels'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
 type Pos = { r: number; c: number }
 type Tile = 'wall' | 'floor' | 'goal'
-type Level = { id: string; name: string; rows: string[] }
 type Snapshot = { player: Pos; boxes: Pos[]; steps: number }
 
 const STORAGE_KEY = 'htmlgame:sokoban:best'
 
-const LEVELS: Level[] = [
-  {
-    id: 'l1',
-    name: '入门 1',
-    rows: [
-      '########',
-      '#..T...#',
-      '#..B...#',
-      '#..P...#',
-      '#......#',
-      '########',
-    ],
-  },
-  {
-    id: 'l2',
-    name: '入门 2',
-    rows: [
-      '########',
-      '#......#',
-      '#.TB...#',
-      '#.BP...#',
-      '#..T...#',
-      '########',
-    ],
-  },
-  {
-    id: 'l3',
-    name: '进阶 1',
-    rows: [
-      '#########',
-      '#....T..#',
-      '#..##...#',
-      '#.B.PB..#',
-      '#..##..T#',
-      '#.......#',
-      '#########',
-    ],
-  },
-]
+const LEVELS: SokobanLevel[] = SOKOBAN_LEVELS
 
 const levelIndex = ref(0)
 const board = ref<Tile[][]>([])
@@ -66,6 +28,7 @@ const rowsCount = computed(() => board.value.length)
 const colsCount = computed(() => board.value[0]?.length ?? 0)
 const statusText = computed(() => (won.value ? '已通关' : '进行中'))
 const levelBest = computed(() => bestSteps.value[currentLevel.value.id] ?? null)
+const boardSizeText = computed(() => `${colsCount.value} x ${rowsCount.value}`)
 
 function keyOf(r: number, c: number) {
   return `${r},${c}`
@@ -104,7 +67,7 @@ function snapshot() {
   }
 }
 
-function parseLevel(level: Level) {
+function parseLevel(level: SokobanLevel) {
   const grid: Tile[][] = []
   const goalList: Pos[] = []
   const boxList: Pos[] = []
@@ -352,6 +315,10 @@ onUnmounted(() => {
           <div class="stat">
             <span class="label">名称</span>
             <span class="value value-sm">{{ currentLevel.name }}</span>
+          </div>
+          <div class="stat">
+            <span class="label">尺寸</span>
+            <span class="value value-sm">{{ boardSizeText }}</span>
           </div>
           <div class="stat">
             <span class="label">步数</span>
