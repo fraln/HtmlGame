@@ -58,6 +58,8 @@ const steps = ref(0)
 const won = ref(false)
 const history = ref<Snapshot[]>([])
 const bestSteps = ref<Record<string, number>>({})
+const boardRef = ref<HTMLElement | null>(null)
+const touchStart = ref<Pos | null>(null)
 
 const currentLevel = computed(() => LEVELS[levelIndex.value])
 const rowsCount = computed(() => board.value.length)
@@ -259,6 +261,29 @@ function onKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowRight') move('right')
 }
 
+function onBoardTouchStart(e: TouchEvent) {
+  const t = e.changedTouches[0]
+  if (!t) return
+  touchStart.value = { r: t.clientY, c: t.clientX }
+}
+
+function onBoardTouchEnd(e: TouchEvent) {
+  if (!touchStart.value || won.value) return
+  const t = e.changedTouches[0]
+  if (!t) return
+  const dx = t.clientX - touchStart.value.c
+  const dy = t.clientY - touchStart.value.r
+  const absX = Math.abs(dx)
+  const absY = Math.abs(dy)
+  touchStart.value = null
+
+  // 避免误触：短距离滑动不触发移动
+  const minSwipe = 24
+  if (absX < minSwipe && absY < minSwipe) return
+  if (absX > absY) move(dx > 0 ? 'right' : 'left')
+  else move(dy > 0 ? 'down' : 'up')
+}
+
 const displayCells = computed(() =>
   board.value.map((row, r) =>
     row.map((tile, c) => ({
@@ -274,10 +299,14 @@ onMounted(() => {
   loadBest()
   resetLevel()
   window.addEventListener('keydown', onKeydown)
+  boardRef.value?.addEventListener('touchstart', onBoardTouchStart, { passive: true })
+  boardRef.value?.addEventListener('touchend', onBoardTouchEnd, { passive: true })
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  boardRef.value?.removeEventListener('touchstart', onBoardTouchStart)
+  boardRef.value?.removeEventListener('touchend', onBoardTouchEnd)
 })
 </script>
 
@@ -294,6 +323,7 @@ onUnmounted(() => {
       <div class="layout">
         <section class="board-wrap">
           <div
+            ref="boardRef"
             class="board"
             role="grid"
             :aria-rowcount="rowsCount"
@@ -367,6 +397,7 @@ onUnmounted(() => {
   margin: 0 auto;
   text-align: left;
   box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 .header {
@@ -399,6 +430,8 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   background: var(--code-bg);
   box-sizing: border-box;
+  touch-action: none;
+  user-select: none;
 }
 
 .cell {
@@ -542,9 +575,45 @@ onUnmounted(() => {
     margin: 0 auto;
   }
 
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hint {
     max-width: none;
     font-size: clamp(12px, 3.4vw, 14px);
+  }
+}
+
+@media (max-width: 480px) {
+  .sokoban-page {
+    max-width: 100vw;
+  }
+
+  .board-wrap,
+  .side {
+    max-width: calc(100vw - 24px);
+  }
+
+  .stat .value {
+    font-size: 18px;
+  }
+
+  .touch-controls {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    z-index: 2;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
+  }
+
+  .touch-grid {
+    max-width: min(96vw, 420px);
+  }
+
+  .touch-btn {
+    min-height: 48px;
   }
 }
 </style>
