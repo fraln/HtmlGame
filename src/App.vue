@@ -151,6 +151,7 @@ function onDrawerSelect() {
 }
 
 .app-main {
+  background: var(--theme-bg-soft);
   padding-left: max(var(--el-main-padding), env(safe-area-inset-left)) !important;
   padding-right: max(var(--el-main-padding), env(safe-area-inset-right)) !important;
   padding-bottom: max(var(--el-main-padding), env(safe-area-inset-bottom)) !important;

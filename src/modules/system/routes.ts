@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { AboutView, HomeView } from './views'
+import { AboutHomeView, AboutThemeView, AboutView, HomeView } from './views'
 
 export const systemRoutes: RouteRecordRaw[] = [
   {
@@ -11,5 +11,18 @@ export const systemRoutes: RouteRecordRaw[] = [
     path: '/about',
     name: 'about',
     component: AboutView,
+    redirect: { name: 'about-home' },
+    children: [
+      {
+        path: '',
+        name: 'about-home',
+        component: AboutHomeView,
+      },
+      {
+        path: 'theme',
+        name: 'about-theme',
+        component: AboutThemeView,
+      },
+    ],
   },
 ]

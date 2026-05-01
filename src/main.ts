@@ -7,8 +7,10 @@ import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import { applyThemePreset, getInitialThemePreset } from './modules/system/theme'
 
 const app = createApp(App)
+applyThemePreset(getInitialThemePreset())
 
 app.use(createPinia())
 app.use(router)
