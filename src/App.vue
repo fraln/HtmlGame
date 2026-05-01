@@ -69,7 +69,7 @@ function onDrawerSelect() {
           <el-menu-item index="/2048">2048</el-menu-item>
           <el-menu-item index="/flappy">Flappy Bird</el-menu-item>
           <el-menu-item index="/sokoban">推箱子</el-menu-item>
-          <el-menu-item index="/about">系统设置</el-menu-item>
+          <el-menu-item index="/settings">系统设置</el-menu-item>
         </el-menu>
       </div>
       <el-drawer
@@ -91,7 +91,7 @@ function onDrawerSelect() {
           <el-menu-item index="/2048">2048</el-menu-item>
           <el-menu-item index="/flappy">Flappy Bird</el-menu-item>
           <el-menu-item index="/sokoban">推箱子</el-menu-item>
-          <el-menu-item index="/about">系统设置</el-menu-item>
+          <el-menu-item index="/settings">系统设置</el-menu-item>
         </el-menu>
       </el-drawer>
     </el-header>

@@ -5,7 +5,7 @@ import {
   getInitialThemePreset,
   themePresets,
   type ThemePreset,
-} from '../theme'
+} from '../../../theme'
 
 const currentPresetId = ref(getInitialThemePreset().id)
 

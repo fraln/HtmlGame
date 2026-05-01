@@ -1,5 +1,11 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { AboutHomeView, AboutThemeView, AboutView, HomeView } from './views'
+import { HomeView } from './home/views'
+import {
+  SettingsHomeView,
+  SettingsSokobanLevelsView,
+  SettingsThemeView,
+  SettingsView,
+} from './settings/views'
 
 export const systemRoutes: RouteRecordRaw[] = [
   {
@@ -8,20 +14,25 @@ export const systemRoutes: RouteRecordRaw[] = [
     component: HomeView,
   },
   {
-    path: '/about',
-    name: 'about',
-    component: AboutView,
-    redirect: { name: 'about-home' },
+    path: '/settings',
+    name: 'settings',
+    component: SettingsView,
+    redirect: { name: 'settings-home' },
     children: [
       {
         path: '',
-        name: 'about-home',
-        component: AboutHomeView,
+        name: 'settings-home',
+        component: SettingsHomeView,
       },
       {
         path: 'theme',
-        name: 'about-theme',
-        component: AboutThemeView,
+        name: 'settings-theme',
+        component: SettingsThemeView,
+      },
+      {
+        path: 'sokoban-levels',
+        name: 'settings-sokoban-levels',
+        component: SettingsSokobanLevelsView,
       },
     ],
   },
