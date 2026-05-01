@@ -208,6 +208,18 @@ function tileClass(tile: Tile) {
   return TILE_CLASS_MAP[tile]
 }
 
+function isGoalTile(tile: Tile) {
+  return tile === 'T' || tile === '*' || tile === '+'
+}
+
+function isBoxTile(tile: Tile) {
+  return tile === 'B' || tile === '*'
+}
+
+function isPlayerTile(tile: Tile) {
+  return tile === 'P' || tile === '+'
+}
+
 async function loadLevels() {
   loading.value = true
   try {
@@ -348,14 +360,14 @@ onUnmounted(() => {
             :type="drawTile === item.symbol ? 'primary' : 'default'"
             @click="drawTile = item.symbol"
           >
-            {{ item.symbol }} {{ item.label }}
+            {{ item.label }}
           </el-button>
         </div>
         <div class="size-actions">
-          <el-button size="small" @click="resizeGrid(editGrid, 'addRow')">+ 行</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'removeRow')">- 行</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'addCol')">+ 列</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'removeCol')">- 列</el-button>
+          <el-button size="small" @click="resizeGrid(editGrid, 'addRow')">新增行</el-button>
+          <el-button size="small" @click="resizeGrid(editGrid, 'removeRow')">减少行</el-button>
+          <el-button size="small" @click="resizeGrid(editGrid, 'addCol')">新增列</el-button>
+          <el-button size="small" @click="resizeGrid(editGrid, 'removeCol')">减少列</el-button>
         </div>
       </div>
 
@@ -378,7 +390,9 @@ onUnmounted(() => {
           @mouseup="stopPaint"
           @contextmenu="eraseCell(editGrid, Math.floor(idx / (editGrid[0]?.length || 1)), idx % (editGrid[0]?.length || 1), $event)"
         >
-          {{ tile }}
+          <span v-if="isGoalTile(tile)" class="goal-dot" />
+          <span v-if="isBoxTile(tile)" class="box" />
+          <span v-if="isPlayerTile(tile)" class="player" />
         </button>
       </div>
     </div>
@@ -435,7 +449,9 @@ onUnmounted(() => {
           @mouseup="stopPaint"
           @contextmenu="eraseCell(addGrid, Math.floor(idx / (addGrid[0]?.length || 1)), idx % (addGrid[0]?.length || 1), $event)"
         >
-          {{ tile }}
+          <span v-if="isGoalTile(tile)" class="goal-dot" />
+          <span v-if="isBoxTile(tile)" class="box" />
+          <span v-if="isPlayerTile(tile)" class="player" />
         </button>
       </div>
     </div>
@@ -527,13 +543,14 @@ onUnmounted(() => {
 }
 
 .grid-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   border: 1px solid var(--el-border-color);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
 }
 
 .grid-cell.immutable {
@@ -542,38 +559,61 @@ onUnmounted(() => {
 }
 
 .tile-wall {
-  background: #334155;
-  color: #fff;
+  background: color-mix(in srgb, var(--text-h) 72%, #111827);
 }
 
 .tile-floor {
-  background: #f1f5f9;
-  color: #334155;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .tile-goal {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .tile-box {
-  background: #ffedd5;
-  color: #9a3412;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .tile-player {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .tile-box-goal {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .tile-player-goal {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, var(--border) 26%, transparent);
+}
+
+.goal-dot {
+  position: absolute;
+  width: 34%;
+  height: 34%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 75%, #fbbf24);
+  z-index: 3;
+}
+
+.box,
+.player {
+  position: absolute;
+  border-radius: 6px;
+}
+
+.box {
+  inset: 14%;
+  background: #f59e0b;
+  border: 1px solid #b45309;
+  z-index: 2;
+}
+
+.player {
+  inset: 20%;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 1px solid #1d4ed8;
+  z-index: 4;
 }
 
 @media (max-width: 720px) {
