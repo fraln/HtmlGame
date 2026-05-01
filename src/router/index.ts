@@ -50,6 +50,11 @@ const router = createRouter({
       name: 'flappy',
       component: () => import('../views/FlappyBirdView.vue'),
     },
+    {
+      path: '/sokoban',
+      name: 'sokoban',
+      component: () => import('../views/SokobanView.vue'),
+    },
   ],
 })
 

@@ -68,6 +68,7 @@ function onDrawerSelect() {
           <el-menu-item index="/tetris">俄罗斯方块</el-menu-item>
           <el-menu-item index="/2048">2048</el-menu-item>
           <el-menu-item index="/flappy">Flappy Bird</el-menu-item>
+          <el-menu-item index="/sokoban">推箱子</el-menu-item>
           <el-menu-item index="/about">关于</el-menu-item>
         </el-menu>
       </div>
@@ -89,6 +90,7 @@ function onDrawerSelect() {
           <el-menu-item index="/tetris">俄罗斯方块</el-menu-item>
           <el-menu-item index="/2048">2048</el-menu-item>
           <el-menu-item index="/flappy">Flappy Bird</el-menu-item>
+          <el-menu-item index="/sokoban">推箱子</el-menu-item>
           <el-menu-item index="/about">关于</el-menu-item>
         </el-menu>
       </el-drawer>
