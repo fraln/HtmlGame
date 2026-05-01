@@ -44,7 +44,7 @@ function onDrawerSelect() {
   <el-container class="layout">
     <el-header class="app-header">
       <div class="header-inner">
-        <span class="brand" aria-hidden="true">moufang</span>
+        <span class="brand" aria-hidden="true">白小猫的小游戏之家</span>
         <el-button
           v-show="isNarrow"
           class="menu-btn"
