@@ -418,10 +418,12 @@ onUnmounted(() => {
 }
 
 .goal-dot {
+  position: absolute;
   width: 34%;
   height: 34%;
   border-radius: 50%;
   background: color-mix(in srgb, var(--accent) 75%, #fbbf24);
+  z-index: 3;
 }
 
 .box,
@@ -434,6 +436,7 @@ onUnmounted(() => {
 .box {
   background: #f59e0b;
   border: 1px solid #b45309;
+  z-index: 2;
 }
 
 .player {
@@ -441,6 +444,7 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #2563eb;
   border: 1px solid #1d4ed8;
+  z-index: 4;
 }
 
 .side {
