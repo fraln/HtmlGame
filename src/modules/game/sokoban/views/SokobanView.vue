@@ -26,6 +26,10 @@ const touchStart = ref<Pos | null>(null)
 const currentLevel = computed(() => LEVELS[levelIndex.value])
 const rowsCount = computed(() => board.value.length)
 const colsCount = computed(() => board.value[0]?.length ?? 0)
+const maxRows = Math.max(...LEVELS.map((level) => level.rows.length))
+const maxCols = Math.max(...LEVELS.map((level) => Math.max(...level.rows.map((row) => row.length))))
+const rowOffset = computed(() => Math.floor((maxRows - rowsCount.value) / 2))
+const colOffset = computed(() => Math.floor((maxCols - colsCount.value) / 2))
 const statusText = computed(() => (won.value ? '已通关' : '进行中'))
 const levelBest = computed(() => bestSteps.value[currentLevel.value.id] ?? null)
 const boardSizeText = computed(() => `${colsCount.value} x ${rowsCount.value}`)
@@ -247,16 +251,42 @@ function onBoardTouchEnd(e: TouchEvent) {
   else move(dy > 0 ? 'down' : 'up')
 }
 
-const displayCells = computed(() =>
-  board.value.map((row, r) =>
-    row.map((tile, c) => ({
-      wall: tile === 'wall',
-      goal: isGoal(r, c),
-      box: hasBox(r, c),
-      player: samePos(player.value, { r, c }),
-    })),
-  ),
-)
+const displayCells = computed(() => {
+  const cells: Array<{
+    wall: boolean
+    floor: boolean
+    goal: boolean
+    box: boolean
+    player: boolean
+    void: boolean
+  }> = []
+
+  for (let r = 0; r < maxRows; r++) {
+    for (let c = 0; c < maxCols; c++) {
+      const levelR = r - rowOffset.value
+      const levelC = c - colOffset.value
+      const inLevel =
+        levelR >= 0 && levelR < rowsCount.value && levelC >= 0 && levelC < colsCount.value
+
+      if (!inLevel) {
+        cells.push({ wall: false, floor: false, goal: false, box: false, player: false, void: true })
+        continue
+      }
+
+      const tile = board.value[levelR][levelC]
+      cells.push({
+        wall: tile === 'wall',
+        floor: tile !== 'wall',
+        goal: isGoal(levelR, levelC),
+        box: hasBox(levelR, levelC),
+        player: samePos(player.value, { r: levelR, c: levelC }),
+        void: false,
+      })
+    }
+  }
+
+  return cells
+})
 
 onMounted(() => {
   loadBest()
@@ -289,16 +319,16 @@ onUnmounted(() => {
             ref="boardRef"
             class="board"
             role="grid"
-            :aria-rowcount="rowsCount"
-            :aria-colcount="colsCount"
+            :aria-rowcount="maxRows"
+            :aria-colcount="maxCols"
             aria-label="推箱子棋盘"
-            :style="{ gridTemplateColumns: `repeat(${colsCount}, minmax(0, 1fr))` }"
+            :style="{ gridTemplateColumns: `repeat(${maxCols}, minmax(0, 1fr))` }"
           >
             <div
-              v-for="(cell, idx) in displayCells.flat()"
+              v-for="(cell, idx) in displayCells"
               :key="idx"
               class="cell"
-              :class="{ wall: cell.wall, floor: !cell.wall }"
+              :class="{ wall: cell.wall, floor: cell.floor, void: cell.void }"
             >
               <span v-if="cell.goal" class="goal-dot" />
               <span v-if="cell.box" class="box" />
@@ -411,6 +441,10 @@ onUnmounted(() => {
 
 .cell.floor {
   background: color-mix(in srgb, var(--border) 26%, transparent);
+}
+
+.cell.void {
+  background: transparent;
 }
 
 .cell.wall {
