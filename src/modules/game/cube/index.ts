@@ -1,3 +1,3 @@
 export * from './routes'
-export * from './views'
+export * from './views/index'
 export * from './components'
