@@ -387,7 +387,7 @@ onUnmounted(() => {
   height: 34%;
   border-radius: 50%;
   background: color-mix(in srgb, var(--accent) 75%, #fbbf24);
-  z-index: 3;
+  z-index: 10;
 }
 
 .box,
