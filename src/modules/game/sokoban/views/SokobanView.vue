@@ -339,10 +339,6 @@ onUnmounted(() => {
 
         <aside class="side">
           <div class="stat">
-            <span class="label">关卡</span>
-            <span class="value">{{ levelIndex + 1 }} / {{ LEVELS.length }}</span>
-          </div>
-          <div class="stat">
             <span class="label">名称</span>
             <span class="value value-sm">{{ currentLevel.name }}</span>
           </div>
@@ -360,12 +356,50 @@ onUnmounted(() => {
           </div>
 
           <div class="actions">
-            <el-button :disabled="levelIndex <= 0" @click="switchLevel(levelIndex - 1)">上一关</el-button>
-            <el-button :disabled="levelIndex >= LEVELS.length - 1" @click="switchLevel(levelIndex + 1)">
-              下一关
-            </el-button>
-            <el-button type="primary" @click="resetLevel">重开 (R)</el-button>
-            <el-button :disabled="history.length === 0" @click="undo">撤销 (U)</el-button>
+            <div class="level-nav" aria-label="关卡选择">
+              <el-button
+                class="level-nav-btn"
+                text
+                bg
+                :disabled="levelIndex <= 0"
+                aria-label="上一关"
+                @click="switchLevel(levelIndex - 1)"
+              >
+                &#60;
+              </el-button>
+              <el-select
+                :model-value="levelIndex"
+                class="level-select"
+                popper-class="sokoban-level-dropdown"
+                placeholder="选关"
+                aria-label="当前关卡，点击展开列表"
+                @update:model-value="switchLevel"
+              >
+                <el-option
+                  v-for="(lv, i) in LEVELS"
+                  :key="lv.id"
+                  :label="`${i + 1} / ${LEVELS.length}`"
+                  :value="i"
+                >
+                  <span class="level-opt-main">{{ i + 1 }} / {{ LEVELS.length }}</span>
+                  <span class="level-opt-name">{{ lv.name }}</span>
+                </el-option>
+              </el-select>
+              <el-button
+                class="level-nav-btn"
+                text
+                bg
+                :disabled="levelIndex >= LEVELS.length - 1"
+                aria-label="下一关"
+                @click="switchLevel(levelIndex + 1)"
+              >
+                &#62;
+              </el-button>
+            </div>
+            <div class="actions-row">
+              <el-button type="primary" @click="resetLevel">重开 (R)</el-button>
+              <el-button :disabled="history.length === 0" @click="undo">撤销 (U)</el-button>
+            </div>
           </div>
 
           <p class="hint">方向键移动玩家，推动箱子覆盖所有目标点即可通关。</p>
@@ -512,6 +546,38 @@ onUnmounted(() => {
 
 .actions {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.level-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.level-nav-btn {
+  flex: 0 0 auto;
+  min-width: 36px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.level-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.level-select :deep(.el-select__wrapper) {
+  min-height: 36px;
+}
+
+.actions-row {
+  display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -580,7 +646,7 @@ onUnmounted(() => {
     margin: 0 auto;
   }
 
-  .actions {
+  .actions-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -620,5 +686,30 @@ onUnmounted(() => {
   .touch-btn {
     min-height: 48px;
   }
+}
+</style>
+
+<style>
+/* 下拉挂载在 body，与 scoped 分离 */
+.sokoban-level-dropdown .el-select-dropdown__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.sokoban-level-dropdown .level-opt-main {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.sokoban-level-dropdown .level-opt-name {
+  flex-shrink: 0;
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: 0.85;
 }
 </style>

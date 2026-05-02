@@ -180,7 +180,16 @@ function resizeGrid(grid: Tile[][], type: 'addRow' | 'removeRow' | 'addCol' | 'r
   const colCount = grid[0]?.length ?? 0
 
   if (type === 'addRow') {
+    const prevRows = rowCount
     grid.push(Array.from({ length: colCount || 1 }, () => '#' as Tile))
+    // 新底行成为外墙；原底行中间列不再是底边，改为地板（至少两行时才存在“原底边”）
+    if (prevRows >= 2) {
+      const innerRow = grid[prevRows - 1]
+      const end = (innerRow?.length ?? 0) - 1
+      for (let c = 1; c < end; c++) {
+        innerRow[c] = '.'
+      }
+    }
     enforceOuterWalls(grid)
     return
   }
@@ -194,7 +203,16 @@ function resizeGrid(grid: Tile[][], type: 'addRow' | 'removeRow' | 'addCol' | 'r
       grid.push(['#'])
       return
     }
+    const prevCols = colCount
     grid.forEach((row) => row.push('#'))
+    // 新最右列成为外墙；原最右列中间行不再是右边，改为地板（至少两列时才有除墙外的格）
+    if (prevCols >= 2) {
+      const newLast = grid[0].length - 1
+      for (let r = 1; r < grid.length - 1; r++) {
+        const row = grid[r]
+        if (row) row[newLast - 1] = '.'
+      }
+    }
     enforceOuterWalls(grid)
     return
   }
@@ -356,11 +374,19 @@ onUnmounted(() => {
           <el-button
             v-for="item in TILE_OPTIONS"
             :key="item.symbol"
+            class="palette-btn"
             size="small"
             :type="drawTile === item.symbol ? 'primary' : 'default'"
             @click="drawTile = item.symbol"
           >
-            {{ item.label }}
+            <span class="palette-row">
+              <span class="palette-swatch" :class="tileClass(item.symbol)">
+                <span v-if="isGoalTile(item.symbol)" class="goal-dot" />
+                <span v-if="isBoxTile(item.symbol)" class="box" />
+                <span v-if="isPlayerTile(item.symbol)" class="player" />
+              </span>
+              <span class="palette-label">{{ item.label }}</span>
+            </span>
           </el-button>
         </div>
         <div class="size-actions">
@@ -415,11 +441,19 @@ onUnmounted(() => {
           <el-button
             v-for="item in TILE_OPTIONS"
             :key="item.symbol"
+            class="palette-btn"
             size="small"
             :type="drawTile === item.symbol ? 'primary' : 'default'"
             @click="drawTile = item.symbol"
           >
-            {{ item.symbol }} {{ item.label }}
+            <span class="palette-row">
+              <span class="palette-swatch" :class="tileClass(item.symbol)">
+                <span v-if="isGoalTile(item.symbol)" class="goal-dot" />
+                <span v-if="isBoxTile(item.symbol)" class="box" />
+                <span v-if="isPlayerTile(item.symbol)" class="player" />
+              </span>
+              <span class="palette-label">{{ item.label }}</span>
+            </span>
           </el-button>
         </div>
         <div class="size-actions">
@@ -530,6 +564,46 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.palette-btn :deep(.el-button__inner) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.palette-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.palette-swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--el-border-color);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.palette-swatch .goal-dot {
+  width: 38%;
+  height: 38%;
+}
+
+.palette-swatch .box {
+  inset: 12%;
+}
+
+.palette-swatch .player {
+  inset: 18%;
+}
+
+.palette-label {
+  line-height: 1.2;
 }
 
 .grid-board {
