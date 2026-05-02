@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { SOKOBAN_LEVELS, type SokobanLevel } from '../levels'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  SOKOBAN_LEVEL_PACKS,
+  SOKOBAN_PACK_LABELS,
+  SOKOBAN_PACK_ORDER,
+  type SokobanLevel,
+  type SokobanLevelPackId,
+} from '../levels'
+
+/** 通关提示后自动进入下一关的等待时间（毫秒） */
+const WIN_ADVANCE_DELAY_MS = 1000
 
 type Dir = 'up' | 'down' | 'left' | 'right'
 type Pos = { r: number; c: number }
@@ -8,8 +18,21 @@ type Tile = 'wall' | 'floor' | 'goal'
 type Snapshot = { player: Pos; boxes: Pos[]; steps: number }
 
 const STORAGE_KEY = 'htmlgame:sokoban:best'
+const STORAGE_KEY_PACK = 'htmlgame:sokoban:pack'
 
-const LEVELS: SokobanLevel[] = SOKOBAN_LEVELS
+function loadPackPreference(): SokobanLevelPackId {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PACK)
+    if (raw === 'beginner' || raw === 'easy' || raw === 'medium') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'beginner'
+}
+
+const pack = ref<SokobanLevelPackId>(loadPackPreference())
+
+const LEVELS = computed(() => SOKOBAN_LEVEL_PACKS[pack.value])
 
 const levelIndex = ref(0)
 const board = ref<Tile[][]>([])
@@ -23,15 +46,36 @@ const bestSteps = ref<Record<string, number>>({})
 const boardRef = ref<HTMLElement | null>(null)
 const touchStart = ref<Pos | null>(null)
 
-const currentLevel = computed(() => LEVELS[levelIndex.value])
+let winAdvanceTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearWinAdvanceTimer() {
+  if (winAdvanceTimer !== null) {
+    clearTimeout(winAdvanceTimer)
+    winAdvanceTimer = null
+  }
+}
+
+const currentLevel = computed((): SokobanLevel | null => {
+  const list = LEVELS.value
+  if (!list.length) return null
+  return list[levelIndex.value] ?? null
+})
 const rowsCount = computed(() => board.value.length)
 const colsCount = computed(() => board.value[0]?.length ?? 0)
-const maxRows = Math.max(...LEVELS.map((level) => level.rows.length))
-const maxCols = Math.max(...LEVELS.map((level) => Math.max(...level.rows.map((row) => row.length))))
-const rowOffset = computed(() => Math.floor((maxRows - rowsCount.value) / 2))
-const colOffset = computed(() => Math.floor((maxCols - colsCount.value) / 2))
+const maxRows = computed(() =>
+  LEVELS.value.length ? Math.max(...LEVELS.value.map((level) => level.rows.length)) : 1,
+)
+const maxCols = computed(() =>
+  LEVELS.value.length
+    ? Math.max(...LEVELS.value.map((level) => Math.max(...level.rows.map((row) => row.length))))
+    : 1,
+)
+const rowOffset = computed(() => Math.floor((maxRows.value - rowsCount.value) / 2))
+const colOffset = computed(() => Math.floor((maxCols.value - colsCount.value) / 2))
 const statusText = computed(() => (won.value ? '已通关' : '进行中'))
-const levelBest = computed(() => bestSteps.value[currentLevel.value.id] ?? null)
+const levelBest = computed(() =>
+  currentLevel.value ? (bestSteps.value[currentLevel.value.id] ?? null) : null,
+)
 const boardSizeText = computed(() => `${colsCount.value} x ${rowsCount.value}`)
 
 function keyOf(r: number, c: number) {
@@ -135,7 +179,9 @@ function loadBest() {
 
 function saveBestIfNeeded() {
   if (!won.value) return
-  const levelId = currentLevel.value.id
+  const cl = currentLevel.value
+  if (!cl) return
+  const levelId = cl.id
   const old = bestSteps.value[levelId]
   if (old && old <= steps.value) return
   bestSteps.value = { ...bestSteps.value, [levelId]: steps.value }
@@ -143,22 +189,74 @@ function saveBestIfNeeded() {
 }
 
 function checkWin() {
+  const wasWon = won.value
   const boxSet = new Set(boxes.value.map((b) => keyOf(b.r, b.c)))
   won.value = goals.value.every((g) => boxSet.has(keyOf(g.r, g.c)))
-  if (won.value) saveBestIfNeeded()
+  if (won.value) {
+    saveBestIfNeeded()
+    if (!wasWon) scheduleNextLevelAfterWin()
+  }
+}
+
+function scheduleNextLevelAfterWin() {
+  clearWinAdvanceTimer()
+  const cl = currentLevel.value
+  if (!cl) return
+  const idx = levelIndex.value
+  const list = LEVELS.value
+  const hasNext = list.length > 0 && idx < list.length - 1
+  if (hasNext) {
+    ElMessage.success({
+      message: `恭喜通关「${cl.name}」！即将进入下一关`,
+      duration: Math.min(WIN_ADVANCE_DELAY_MS + 800, 4000),
+    })
+    winAdvanceTimer = setTimeout(() => {
+      winAdvanceTimer = null
+      if (levelIndex.value !== idx || !won.value) return
+      switchLevel(idx + 1)
+    }, WIN_ADVANCE_DELAY_MS)
+  } else {
+    ElMessage.success({
+      message: `恭喜通关「${cl.name}」！已通关本难度全部关卡`,
+      duration: 3500,
+    })
+  }
+}
+
+function clearBoardState() {
+  board.value = []
+  goals.value = []
+  boxes.value = []
+  player.value = { r: 0, c: 0 }
+  steps.value = 0
+  won.value = false
+  history.value = []
 }
 
 function resetLevel() {
-  parseLevel(currentLevel.value)
+  clearWinAdvanceTimer()
+  const list = LEVELS.value
+  if (!list.length) {
+    clearBoardState()
+    return
+  }
+  if (levelIndex.value >= list.length) levelIndex.value = 0
+  const level = list[levelIndex.value]
+  if (!level) return
+  parseLevel(level)
   checkWin()
 }
 
 function switchLevel(next: number) {
-  levelIndex.value = Math.min(Math.max(next, 0), LEVELS.length - 1)
+  clearWinAdvanceTimer()
+  const list = LEVELS.value
+  if (!list.length) return
+  levelIndex.value = Math.min(Math.max(next, 0), list.length - 1)
   resetLevel()
 }
 
 function undo() {
+  clearWinAdvanceTimer()
   if (history.value.length === 0) return
   const prev = history.value.pop()
   if (!prev) return
@@ -170,7 +268,7 @@ function undo() {
 }
 
 function move(dir: Dir) {
-  if (won.value) return
+  if (won.value || !LEVELS.value.length || !currentLevel.value) return
 
   const d =
     dir === 'up'
@@ -235,7 +333,7 @@ function onBoardTouchStart(e: TouchEvent) {
 }
 
 function onBoardTouchEnd(e: TouchEvent) {
-  if (!touchStart.value || won.value) return
+  if (!touchStart.value || won.value || !LEVELS.value.length) return
   const t = e.changedTouches[0]
   if (!t) return
   const dx = t.clientX - touchStart.value.c
@@ -251,6 +349,18 @@ function onBoardTouchEnd(e: TouchEvent) {
   else move(dy > 0 ? 'down' : 'up')
 }
 
+watch(pack, () => {
+  try {
+    localStorage.setItem(STORAGE_KEY_PACK, pack.value)
+  } catch {
+    /* ignore */
+  }
+  levelIndex.value = 0
+  clearWinAdvanceTimer()
+  if (LEVELS.value.length) resetLevel()
+  else clearBoardState()
+})
+
 const displayCells = computed(() => {
   const cells: Array<{
     wall: boolean
@@ -261,8 +371,8 @@ const displayCells = computed(() => {
     void: boolean
   }> = []
 
-  for (let r = 0; r < maxRows; r++) {
-    for (let c = 0; c < maxCols; c++) {
+  for (let r = 0; r < maxRows.value; r++) {
+    for (let c = 0; c < maxCols.value; c++) {
       const levelR = r - rowOffset.value
       const levelC = c - colOffset.value
       const inLevel =
@@ -288,18 +398,35 @@ const displayCells = computed(() => {
   return cells
 })
 
+function detachBoardTouch(el: HTMLElement | null) {
+  if (!el) return
+  el.removeEventListener('touchstart', onBoardTouchStart)
+  el.removeEventListener('touchend', onBoardTouchEnd)
+}
+
+function attachBoardTouch(el: HTMLElement | null) {
+  if (!el) return
+  el.addEventListener('touchstart', onBoardTouchStart, { passive: true })
+  el.addEventListener('touchend', onBoardTouchEnd, { passive: true })
+}
+
+watch(boardRef, (el, prev) => {
+  detachBoardTouch(prev)
+  attachBoardTouch(el)
+})
+
 onMounted(() => {
   loadBest()
-  resetLevel()
+  if (LEVELS.value.length) resetLevel()
+  else clearBoardState()
   window.addEventListener('keydown', onKeydown)
-  boardRef.value?.addEventListener('touchstart', onBoardTouchStart, { passive: true })
-  boardRef.value?.addEventListener('touchend', onBoardTouchEnd, { passive: true })
+  attachBoardTouch(boardRef.value)
 })
 
 onUnmounted(() => {
+  clearWinAdvanceTimer()
   window.removeEventListener('keydown', onKeydown)
-  boardRef.value?.removeEventListener('touchstart', onBoardTouchStart)
-  boardRef.value?.removeEventListener('touchend', onBoardTouchEnd)
+  detachBoardTouch(boardRef.value)
 })
 </script>
 
@@ -315,7 +442,11 @@ onUnmounted(() => {
 
       <div class="layout">
         <section class="board-wrap">
+          <div v-if="!LEVELS.length" class="board-empty">
+            <el-empty description="该难度暂无关卡，敬请期待" />
+          </div>
           <div
+            v-else
             ref="boardRef"
             class="board"
             role="grid"
@@ -338,9 +469,17 @@ onUnmounted(() => {
         </section>
 
         <aside class="side">
+          <div class="stat difficulty-stat">
+            <span class="label">难度</span>
+            <el-radio-group v-model="pack" size="small" class="difficulty-rg">
+              <el-radio-button v-for="pid in SOKOBAN_PACK_ORDER" :key="pid" :label="pid">
+                {{ SOKOBAN_PACK_LABELS[pid] }}
+              </el-radio-button>
+            </el-radio-group>
+          </div>
           <div class="stat">
             <span class="label">名称</span>
-            <span class="value value-sm">{{ currentLevel.name }}</span>
+            <span class="value value-sm">{{ currentLevel?.name ?? '-' }}</span>
           </div>
           <div class="stat">
             <span class="label">尺寸</span>
@@ -361,7 +500,7 @@ onUnmounted(() => {
                 class="level-nav-btn"
                 text
                 bg
-                :disabled="levelIndex <= 0"
+                :disabled="!LEVELS.length || levelIndex <= 0"
                 aria-label="上一关"
                 @click="switchLevel(levelIndex - 1)"
               >
@@ -372,6 +511,7 @@ onUnmounted(() => {
                 class="level-select"
                 popper-class="sokoban-level-dropdown"
                 placeholder="选关"
+                :disabled="!LEVELS.length"
                 aria-label="当前关卡，点击展开列表"
                 @update:model-value="switchLevel"
               >
@@ -389,7 +529,7 @@ onUnmounted(() => {
                 class="level-nav-btn"
                 text
                 bg
-                :disabled="levelIndex >= LEVELS.length - 1"
+                :disabled="!LEVELS.length || levelIndex >= LEVELS.length - 1"
                 aria-label="下一关"
                 @click="switchLevel(levelIndex + 1)"
               >
@@ -397,25 +537,30 @@ onUnmounted(() => {
               </el-button>
             </div>
             <div class="actions-row">
-              <el-button type="primary" @click="resetLevel">重开 (R)</el-button>
-              <el-button :disabled="history.length === 0" @click="undo">撤销 (U)</el-button>
+              <el-button type="primary" :disabled="!LEVELS.length" @click="resetLevel">重开 (R)</el-button>
+              <el-button :disabled="!LEVELS.length || history.length === 0" @click="undo">撤销 (U)</el-button>
             </div>
           </div>
 
           <p class="hint">方向键移动玩家，推动箱子覆盖所有目标点即可通关。</p>
           <p class="hint">快捷键：`[` / `]` 切关，R 重开，U 撤销一步。</p>
-          <p v-if="won" class="pass">通关！可切换下一关继续挑战。</p>
+          <p v-if="won && LEVELS.length && levelIndex < LEVELS.length - 1" class="pass">
+            通关！即将自动进入下一关，也可手动选关。
+          </p>
+          <p v-else-if="won && LEVELS.length" class="pass">通关！已是本难度最后一关。</p>
         </aside>
       </div>
 
       <div class="touch-controls" aria-label="触控方向键">
         <div class="touch-grid">
           <span class="touch-placeholder" />
-          <el-button class="touch-btn" :disabled="won" @click="move('up')">上</el-button>
+          <el-button class="touch-btn" :disabled="won || !LEVELS.length" @click="move('up')">上</el-button>
           <span class="touch-placeholder" />
-          <el-button class="touch-btn" :disabled="won" @click="move('left')">左</el-button>
-          <el-button class="touch-btn" type="primary" :disabled="won" @click="move('down')">下</el-button>
-          <el-button class="touch-btn" :disabled="won" @click="move('right')">右</el-button>
+          <el-button class="touch-btn" :disabled="won || !LEVELS.length" @click="move('left')">左</el-button>
+          <el-button class="touch-btn" type="primary" :disabled="won || !LEVELS.length" @click="move('down')">
+            下
+          </el-button>
+          <el-button class="touch-btn" :disabled="won || !LEVELS.length" @click="move('right')">右</el-button>
         </div>
       </div>
     </el-card>
@@ -450,6 +595,21 @@ onUnmounted(() => {
   width: 100%;
   max-width: min(420px, calc(100vw - 48px));
   margin: 0 auto;
+}
+
+.board-empty {
+  padding: clamp(16px, 5vw, 32px) 0;
+}
+
+.difficulty-stat {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.difficulty-rg {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .board {

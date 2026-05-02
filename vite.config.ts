@@ -9,7 +9,27 @@ import type { PluginOption } from 'vite'
 type SokobanLevel = { id: string; name: string; rows: string[] }
 type LevelsPayload = { levels: SokobanLevel[] }
 
-const levelsFilePath = path.resolve(__dirname, 'src/modules/game/sokoban/levels.json')
+type SokobanLevelPackId = 'beginner' | 'easy' | 'medium'
+
+const LEVEL_PACK_FILES: Record<SokobanLevelPackId, string> = {
+  beginner: path.resolve(__dirname, 'src/modules/game/sokoban/level-packs/beginner.json'),
+  easy: path.resolve(__dirname, 'src/modules/game/sokoban/level-packs/easy.json'),
+  medium: path.resolve(__dirname, 'src/modules/game/sokoban/level-packs/medium.json'),
+}
+
+function getPackFromUrl(req: IncomingMessage): SokobanLevelPackId | null {
+  const raw = req.url ?? '/'
+  const qIndex = raw.indexOf('?')
+  const search = qIndex >= 0 ? raw.slice(qIndex) : ''
+  const params = new URLSearchParams(search)
+  const pack = params.get('pack')
+  if (pack === 'beginner' || pack === 'easy' || pack === 'medium') return pack
+  return null
+}
+
+function levelsPathForPack(pack: SokobanLevelPackId): string {
+  return LEVEL_PACK_FILES[pack]
+}
 
 function createSokobanLevelsApiPlugin(): PluginOption {
   return {
@@ -28,8 +48,9 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
-async function readLevelsFromFile() {
-  const content = await fs.readFile(levelsFilePath, 'utf-8')
+async function readLevelsFromFile(pack: SokobanLevelPackId) {
+  const filePath = levelsPathForPack(pack)
+  const content = await fs.readFile(filePath, 'utf-8')
   return JSON.parse(content) as SokobanLevel[]
 }
 
@@ -66,7 +87,7 @@ function validateRows(rows: string[]) {
 
 function validateLevels(levels: SokobanLevel[]) {
   if (!Array.isArray(levels)) return 'levels 必须是数组'
-  if (levels.length === 0) return 'levels 不能为空'
+  if (levels.length === 0) return null
 
   const seenIds = new Set<string>()
   for (const level of levels) {
@@ -83,8 +104,14 @@ function validateLevels(levels: SokobanLevel[]) {
 
 async function handleLevelsRequest(req: IncomingMessage, res: ServerResponse) {
   try {
+    const pack = getPackFromUrl(req)
+    if (!pack) {
+      sendJson(res, 400, { message: '请使用查询参数 pack=beginner|easy|medium' })
+      return
+    }
+
     if (req.method === 'GET') {
-      const levels = await readLevelsFromFile()
+      const levels = await readLevelsFromFile(pack)
       sendJson(res, 200, { levels } satisfies LevelsPayload)
       return
     }
@@ -102,7 +129,8 @@ async function handleLevelsRequest(req: IncomingMessage, res: ServerResponse) {
         sendJson(res, 400, { message: error })
         return
       }
-      await fs.writeFile(levelsFilePath, JSON.stringify(levels, null, 2) + '\n', 'utf-8')
+      const filePath = levelsPathForPack(pack)
+      await fs.writeFile(filePath, JSON.stringify(levels, null, 2) + '\n', 'utf-8')
       sendJson(res, 200, { levels } satisfies LevelsPayload)
       return
     }

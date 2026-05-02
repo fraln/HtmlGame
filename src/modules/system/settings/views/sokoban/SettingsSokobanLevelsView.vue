@@ -1,16 +1,49 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { SokobanLevel } from '../../../../game/sokoban/levels'
+import {
+  nextSokobanLevelId,
+  SOKOBAN_PACK_LABELS,
+  SOKOBAN_PACK_ORDER,
+  type SokobanLevel,
+  type SokobanLevelPackId,
+} from '../../../../game/sokoban/levels'
 import SokobanLevelEditorDialog from './SokobanLevelEditorDialog.vue'
 import type { SokobanEditorTile } from './SokobanLevelEditorDialog.vue'
 
 type LevelsResponse = { levels: SokobanLevel[] }
 
+/** 避免保存后或子组件更新导致难度包选项被重置；与游戏页的 pack 记忆分开 */
+const SETTINGS_PACK_STORAGE_KEY = 'htmlgame:settings:sokoban-pack'
+
+function loadStoredPack(): SokobanLevelPackId {
+  if (typeof sessionStorage === 'undefined') return 'beginner'
+  try {
+    const raw = sessionStorage.getItem(SETTINGS_PACK_STORAGE_KEY)
+    if (raw === 'beginner' || raw === 'easy' || raw === 'medium') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'beginner'
+}
+
+function persistPackChoice(p: SokobanLevelPackId) {
+  try {
+    sessionStorage.setItem(SETTINGS_PACK_STORAGE_KEY, p)
+  } catch {
+    /* ignore */
+  }
+}
+
 const loading = ref(false)
 const saving = ref(false)
+const pack = ref<SokobanLevelPackId>(loadStoredPack())
 const levels = ref<SokobanLevel[]>([])
 const activeId = ref('')
+
+function levelsApiUrl() {
+  return `/api/sokoban-levels?pack=${encodeURIComponent(pack.value)}`
+}
 
 const editDialogVisible = ref(false)
 const addDialogVisible = ref(false)
@@ -25,13 +58,7 @@ const activeLevel = computed(() => levels.value.find((level) => level.id === act
 const editingLevel = computed(() => levels.value.find((level) => level.id === editingLevelId.value) ?? null)
 
 function nextLevelId(currentLevels: SokobanLevel[]) {
-  const maxSuffix = currentLevels.reduce((max, level) => {
-    const match = /^l(\d+)$/.exec(level.id)
-    if (!match) return max
-    const suffix = Number(match[1])
-    return Number.isFinite(suffix) ? Math.max(max, suffix) : max
-  }, 0)
-  return `l${maxSuffix + 1}`
+  return nextSokobanLevelId(currentLevels, pack.value)
 }
 
 function rowsToGrid(rows: string[]) {
@@ -120,7 +147,7 @@ function openAddDialog() {
 async function loadLevels() {
   loading.value = true
   try {
-    const response = await fetch('/api/sokoban-levels')
+    const response = await fetch(levelsApiUrl())
     if (!response.ok) {
       const message = await response.text()
       throw new Error(message || `读取失败（${response.status}）`)
@@ -142,9 +169,11 @@ async function loadLevels() {
 }
 
 async function persistLevels(nextLevels: SokobanLevel[]) {
+  const packWhenSaving = pack.value
+  persistPackChoice(packWhenSaving)
   saving.value = true
   try {
-    const response = await fetch('/api/sokoban-levels', {
+    const response = await fetch(levelsApiUrl(), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ levels: nextLevels }),
@@ -160,6 +189,10 @@ async function persistLevels(nextLevels: SokobanLevel[]) {
     ElMessage.error(`保存失败：${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     saving.value = false
+    if (pack.value !== packWhenSaving) {
+      pack.value = packWhenSaving
+    }
+    persistPackChoice(packWhenSaving)
   }
 }
 
@@ -206,6 +239,11 @@ async function saveNewLevel() {
 }
 
 onMounted(loadLevels)
+
+watch(pack, (p) => {
+  persistPackChoice(p)
+  void loadLevels()
+})
 </script>
 
 <template>
@@ -219,6 +257,16 @@ onMounted(loadLevels)
         </div>
       </div>
     </template>
+
+    <div class="pack-toolbar">
+      <span class="pack-label">难度包</span>
+      <el-radio-group v-model="pack" size="small" name="sokoban-settings-pack">
+        <el-radio-button v-for="pid in SOKOBAN_PACK_ORDER" :key="pid" :label="pid">
+          {{ SOKOBAN_PACK_LABELS[pid] }}
+        </el-radio-button>
+      </el-radio-group>
+      <span class="pack-hint">对应文件：<code>level-packs/{{ pack }}.json</code></span>
+    </div>
 
     <div class="level-list">
       <div v-for="level in levels" :key="level.id" class="level-row">
@@ -270,8 +318,31 @@ onMounted(loadLevels)
   gap: 8px;
 }
 
+.pack-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.pack-label {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.pack-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  width: 100%;
+}
+
+.pack-hint code {
+  font-size: 12px;
+}
+
 .level-list {
-  margin-top: 14px;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
