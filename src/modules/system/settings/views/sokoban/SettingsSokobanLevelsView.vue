@@ -84,9 +84,21 @@ function validateRows(rows: string[]) {
   return null
 }
 
+function fillInteriorFloor(grid: Tile[][]) {
+  if (!grid.length || !grid[0]?.length) return
+  const lr = grid.length - 1
+  const lc = grid[0].length - 1
+  for (let r = 1; r < lr; r++) {
+    for (let c = 1; c < lc; c++) {
+      grid[r][c] = '.'
+    }
+  }
+}
+
 function createBlankGrid(rowCount = 8, colCount = 8) {
   const grid = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => '#' as Tile))
   enforceOuterWalls(grid)
+  fillInteriorFloor(grid)
   return grid
 }
 
@@ -181,8 +193,13 @@ function resizeGrid(grid: Tile[][], type: 'addRow' | 'removeRow' | 'addCol' | 'r
 
   if (type === 'addRow') {
     const prevRows = rowCount
-    grid.push(Array.from({ length: colCount || 1 }, () => '#' as Tile))
-    // 新底行成为外墙；原底行中间列不再是底边，改为地板（至少两行时才存在“原底边”）
+    const w = colCount || 1
+    // 新行左右为墙，中间为地板；随后 enforce 会把整行底边压成墙，语义上与「仅围墙为墙」一致
+    const newRow = Array.from({ length: w }, (_, c) =>
+      w <= 2 || c === 0 || c === w - 1 ? ('#' as Tile) : ('.' as Tile),
+    )
+    grid.push(newRow)
+    // 新底行成为外墙；原底行中间列不再是底边，改为地板（至少两行时才存在「原底边」）
     if (prevRows >= 2) {
       const innerRow = grid[prevRows - 1]
       const end = (innerRow?.length ?? 0) - 1
@@ -204,7 +221,11 @@ function resizeGrid(grid: Tile[][], type: 'addRow' | 'removeRow' | 'addCol' | 'r
       return
     }
     const prevCols = colCount
-    grid.forEach((row) => row.push('#'))
+    const lastRowBefore = rowCount - 1
+    grid.forEach((row, r) => {
+      const edgeRow = r === 0 || r === lastRowBefore
+      row.push(edgeRow ? ('#' as Tile) : ('.' as Tile))
+    })
     // 新最右列成为外墙；原最右列中间行不再是右边，改为地板（至少两列时才有除墙外的格）
     if (prevCols >= 2) {
       const newLast = grid[0].length - 1
@@ -457,10 +478,10 @@ onUnmounted(() => {
           </el-button>
         </div>
         <div class="size-actions">
-          <el-button size="small" @click="resizeGrid(addGrid, 'addRow')">+ 行</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'removeRow')">- 行</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'addCol')">+ 列</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'removeCol')">- 列</el-button>
+          <el-button size="small" @click="resizeGrid(addGrid, 'addRow')">新增行</el-button>
+          <el-button size="small" @click="resizeGrid(addGrid, 'removeRow')">减少行</el-button>
+          <el-button size="small" @click="resizeGrid(addGrid, 'addCol')">新增列</el-button>
+          <el-button size="small" @click="resizeGrid(addGrid, 'removeCol')">减少列</el-button>
         </div>
       </div>
 
