@@ -259,13 +259,13 @@ watch(pack, (p) => {
     </template>
 
     <div class="pack-toolbar">
-      <span class="pack-label">难度包</span>
+      <span class="pack-label">难度等级</span>
       <el-radio-group v-model="pack" size="small" name="sokoban-settings-pack">
         <el-radio-button v-for="pid in SOKOBAN_PACK_ORDER" :key="pid" :label="pid">
           {{ SOKOBAN_PACK_LABELS[pid] }}
         </el-radio-button>
       </el-radio-group>
-      <span class="pack-hint">对应文件：<code>level-packs/{{ pack }}.json</code></span>
+      <!-- <span class="pack-hint">对应文件：<code>level-packs/{{ pack }}.json</code></span> -->
     </div>
 
     <div class="level-list">
