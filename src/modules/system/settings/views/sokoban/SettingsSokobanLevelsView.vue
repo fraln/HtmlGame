@@ -1,30 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { SokobanLevel } from '../../../../game/sokoban/levels'
+import SokobanLevelEditorDialog from './SokobanLevelEditorDialog.vue'
+import type { SokobanEditorTile } from './SokobanLevelEditorDialog.vue'
 
 type LevelsResponse = { levels: SokobanLevel[] }
-type Tile = '#' | '.' | 'T' | 'B' | 'P' | '*' | '+'
-type TileOption = { symbol: Tile; label: string }
-
-const TILE_OPTIONS: TileOption[] = [
-  { symbol: '#', label: '墙' },
-  { symbol: '.', label: '地板' },
-  { symbol: 'T', label: '目标点' },
-  { symbol: 'B', label: '箱子' },
-  { symbol: 'P', label: '玩家' },
-  { symbol: '*', label: '箱子在目标点' },
-  { symbol: '+', label: '玩家在目标点' },
-]
-const TILE_CLASS_MAP: Record<Tile, string> = {
-  '#': 'tile-wall',
-  '.': 'tile-floor',
-  T: 'tile-goal',
-  B: 'tile-box',
-  P: 'tile-player',
-  '*': 'tile-box-goal',
-  '+': 'tile-player-goal',
-}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -34,12 +15,11 @@ const activeId = ref('')
 const editDialogVisible = ref(false)
 const addDialogVisible = ref(false)
 const editingLevelId = ref('')
-const drawTile = ref<Tile>('#')
-const editGrid = ref<Tile[][]>([])
-const addGrid = ref<Tile[][]>([])
+const drawTile = ref<SokobanEditorTile>('#')
+const editGrid = ref<SokobanEditorTile[][]>([])
+const addGrid = ref<SokobanEditorTile[][]>([])
 const editLevelName = ref('')
 const newLevelName = ref('')
-const isMouseDrawing = ref(false)
 
 const activeLevel = computed(() => levels.value.find((level) => level.id === activeId.value) ?? null)
 const editingLevel = computed(() => levels.value.find((level) => level.id === editingLevelId.value) ?? null)
@@ -55,10 +35,10 @@ function nextLevelId(currentLevels: SokobanLevel[]) {
 }
 
 function rowsToGrid(rows: string[]) {
-  return rows.map((row) => row.split('') as Tile[])
+  return rows.map((row) => row.split('') as SokobanEditorTile[])
 }
 
-function gridToRows(grid: Tile[][]) {
+function gridToRows(grid: SokobanEditorTile[][]) {
   return grid.map((line) => line.join(''))
 }
 
@@ -84,7 +64,7 @@ function validateRows(rows: string[]) {
   return null
 }
 
-function fillInteriorFloor(grid: Tile[][]) {
+function fillInteriorFloor(grid: SokobanEditorTile[][]) {
   if (!grid.length || !grid[0]?.length) return
   const lr = grid.length - 1
   const lc = grid[0].length - 1
@@ -95,8 +75,23 @@ function fillInteriorFloor(grid: Tile[][]) {
   }
 }
 
+function enforceOuterWalls(grid: SokobanEditorTile[][]) {
+  if (!grid.length || !grid[0]?.length) return
+  const lastRow = grid.length - 1
+  const lastCol = grid[0].length - 1
+  for (let r = 0; r <= lastRow; r++) {
+    for (let c = 0; c <= lastCol; c++) {
+      if (r === 0 || c === 0 || r === lastRow || c === lastCol) {
+        grid[r][c] = '#'
+      }
+    }
+  }
+}
+
 function createBlankGrid(rowCount = 8, colCount = 8) {
-  const grid = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => '#' as Tile))
+  const grid = Array.from({ length: rowCount }, () =>
+    Array.from({ length: colCount }, () => '#' as SokobanEditorTile),
+  )
   enforceOuterWalls(grid)
   fillInteriorFloor(grid)
   return grid
@@ -120,143 +115,6 @@ function openAddDialog() {
   drawTile.value = '#'
   addGrid.value = createBlankGrid(rowCount, colCount)
   addDialogVisible.value = true
-}
-
-function isBorderCell(grid: Tile[][], rowIndex: number, colIndex: number) {
-  const rowCount = grid.length
-  const colCount = grid[0]?.length ?? 0
-  return rowIndex === 0 || colIndex === 0 || rowIndex === rowCount - 1 || colIndex === colCount - 1
-}
-
-function enforceOuterWalls(grid: Tile[][]) {
-  if (!grid.length || !grid[0]?.length) return
-  const lastRow = grid.length - 1
-  const lastCol = grid[0].length - 1
-  for (let r = 0; r <= lastRow; r++) {
-    for (let c = 0; c <= lastCol; c++) {
-      if (r === 0 || c === 0 || r === lastRow || c === lastCol) {
-        grid[r][c] = '#'
-      }
-    }
-  }
-}
-
-function clearExistingPlayer(grid: Tile[][]) {
-  for (let r = 0; r < grid.length; r++) {
-    for (let c = 0; c < (grid[r]?.length ?? 0); c++) {
-      const tile = grid[r][c]
-      if (tile === 'P') grid[r][c] = '.'
-      else if (tile === '+') grid[r][c] = 'T'
-    }
-  }
-}
-
-function paintCell(grid: Tile[][], rowIndex: number, colIndex: number, erase = false) {
-  const row = grid[rowIndex]
-  if (!row) return
-  if (isBorderCell(grid, rowIndex, colIndex)) return
-  if (erase) {
-    row[colIndex] = '.'
-    return
-  }
-
-  const nextTile = drawTile.value
-  if (nextTile === 'P' || nextTile === '+') {
-    clearExistingPlayer(grid)
-  }
-  row[colIndex] = nextTile
-}
-
-function startPaint(grid: Tile[][], rowIndex: number, colIndex: number, event: MouseEvent) {
-  if (event.button !== 0) return
-  isMouseDrawing.value = true
-  paintCell(grid, rowIndex, colIndex)
-}
-
-function continuePaint(grid: Tile[][], rowIndex: number, colIndex: number, event: MouseEvent) {
-  if (!isMouseDrawing.value && event.buttons !== 1) return
-  paintCell(grid, rowIndex, colIndex)
-}
-
-function stopPaint() {
-  isMouseDrawing.value = false
-}
-
-function eraseCell(grid: Tile[][], rowIndex: number, colIndex: number, event: MouseEvent) {
-  event.preventDefault()
-  paintCell(grid, rowIndex, colIndex, true)
-}
-
-function resizeGrid(grid: Tile[][], type: 'addRow' | 'removeRow' | 'addCol' | 'removeCol') {
-  const rowCount = grid.length
-  const colCount = grid[0]?.length ?? 0
-
-  if (type === 'addRow') {
-    const prevRows = rowCount
-    const w = colCount || 1
-    // 新行左右为墙，中间为地板；随后 enforce 会把整行底边压成墙，语义上与「仅围墙为墙」一致
-    const newRow = Array.from({ length: w }, (_, c) =>
-      w <= 2 || c === 0 || c === w - 1 ? ('#' as Tile) : ('.' as Tile),
-    )
-    grid.push(newRow)
-    // 新底行成为外墙；原底行中间列不再是底边，改为地板（至少两行时才存在「原底边」）
-    if (prevRows >= 2) {
-      const innerRow = grid[prevRows - 1]
-      const end = (innerRow?.length ?? 0) - 1
-      for (let c = 1; c < end; c++) {
-        innerRow[c] = '.'
-      }
-    }
-    enforceOuterWalls(grid)
-    return
-  }
-  if (type === 'removeRow' && rowCount > 1) {
-    grid.pop()
-    enforceOuterWalls(grid)
-    return
-  }
-  if (type === 'addCol') {
-    if (rowCount === 0) {
-      grid.push(['#'])
-      return
-    }
-    const prevCols = colCount
-    const lastRowBefore = rowCount - 1
-    grid.forEach((row, r) => {
-      const edgeRow = r === 0 || r === lastRowBefore
-      row.push(edgeRow ? ('#' as Tile) : ('.' as Tile))
-    })
-    // 新最右列成为外墙；原最右列中间行不再是右边，改为地板（至少两列时才有除墙外的格）
-    if (prevCols >= 2) {
-      const newLast = grid[0].length - 1
-      for (let r = 1; r < grid.length - 1; r++) {
-        const row = grid[r]
-        if (row) row[newLast - 1] = '.'
-      }
-    }
-    enforceOuterWalls(grid)
-    return
-  }
-  if (type === 'removeCol' && colCount > 1) {
-    grid.forEach((row) => row.pop())
-    enforceOuterWalls(grid)
-  }
-}
-
-function tileClass(tile: Tile) {
-  return TILE_CLASS_MAP[tile]
-}
-
-function isGoalTile(tile: Tile) {
-  return tile === 'T' || tile === '*' || tile === '+'
-}
-
-function isBoxTile(tile: Tile) {
-  return tile === 'B' || tile === '*'
-}
-
-function isPlayerTile(tile: Tile) {
-  return tile === 'P' || tile === '+'
 }
 
 async function loadLevels() {
@@ -348,12 +206,6 @@ async function saveNewLevel() {
 }
 
 onMounted(loadLevels)
-onMounted(() => {
-  window.addEventListener('mouseup', stopPaint)
-})
-onUnmounted(() => {
-  window.removeEventListener('mouseup', stopPaint)
-})
 </script>
 
 <template>
@@ -378,144 +230,27 @@ onUnmounted(() => {
     </div>
   </el-card>
 
-  <el-dialog
+  <SokobanLevelEditorDialog
     v-model="editDialogVisible"
+    v-model:level-name="editLevelName"
+    v-model:grid="editGrid"
+    v-model:draw-tile="drawTile"
+    mode="edit"
     :title="`编辑关卡：${editingLevel?.name ?? ''}`"
-    width="min(920px, 96vw)"
-    destroy-on-close
-  >
-    <div class="dialog-content">
-      <el-form label-width="80px">
-        <el-form-item label="关卡名称">
-          <el-input v-model="editLevelName" maxlength="40" show-word-limit placeholder="请输入关卡名称" />
-        </el-form-item>
-      </el-form>
-      <div class="tools">
-        <div class="palette">
-          <el-button
-            v-for="item in TILE_OPTIONS"
-            :key="item.symbol"
-            class="palette-btn"
-            size="small"
-            :type="drawTile === item.symbol ? 'primary' : 'default'"
-            @click="drawTile = item.symbol"
-          >
-            <span class="palette-row">
-              <span class="palette-swatch" :class="tileClass(item.symbol)">
-                <span v-if="isGoalTile(item.symbol)" class="goal-dot" />
-                <span v-if="isBoxTile(item.symbol)" class="box" />
-                <span v-if="isPlayerTile(item.symbol)" class="player" />
-              </span>
-              <span class="palette-label">{{ item.label }}</span>
-            </span>
-          </el-button>
-        </div>
-        <div class="size-actions">
-          <el-button size="small" @click="resizeGrid(editGrid, 'addRow')">新增行</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'removeRow')">减少行</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'addCol')">新增列</el-button>
-          <el-button size="small" @click="resizeGrid(editGrid, 'removeCol')">减少列</el-button>
-        </div>
-      </div>
+    :saving="saving"
+    @confirm="saveEditedLevel"
+  />
 
-      <div
-        class="grid-board"
-        :style="{ gridTemplateColumns: `repeat(${editGrid[0]?.length ?? 1}, 32px)` }"
-        @mouseup="stopPaint"
-      >
-        <button
-          v-for="(tile, idx) in editGrid.flat()"
-          :key="idx"
-          class="grid-cell"
-          :class="[
-            tileClass(tile),
-            { immutable: isBorderCell(editGrid, Math.floor(idx / (editGrid[0]?.length || 1)), idx % (editGrid[0]?.length || 1)) },
-          ]"
-          type="button"
-          @mousedown="startPaint(editGrid, Math.floor(idx / (editGrid[0]?.length || 1)), idx % (editGrid[0]?.length || 1), $event)"
-          @mouseenter="continuePaint(editGrid, Math.floor(idx / (editGrid[0]?.length || 1)), idx % (editGrid[0]?.length || 1), $event)"
-          @mouseup="stopPaint"
-          @contextmenu="eraseCell(editGrid, Math.floor(idx / (editGrid[0]?.length || 1)), idx % (editGrid[0]?.length || 1), $event)"
-        >
-          <span v-if="isGoalTile(tile)" class="goal-dot" />
-          <span v-if="isBoxTile(tile)" class="box" />
-          <span v-if="isPlayerTile(tile)" class="player" />
-        </button>
-      </div>
-    </div>
-
-    <template #footer>
-      <el-button @click="editDialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="saveEditedLevel">保存</el-button>
-    </template>
-  </el-dialog>
-
-  <el-dialog v-model="addDialogVisible" title="新增关卡" width="min(920px, 96vw)" destroy-on-close>
-    <div class="dialog-content">
-      <el-form label-width="80px">
-        <el-form-item label="关卡名称">
-          <el-input v-model="newLevelName" maxlength="40" show-word-limit placeholder="请输入关卡名称" />
-        </el-form-item>
-      </el-form>
-      <div class="tools">
-        <div class="palette">
-          <el-button
-            v-for="item in TILE_OPTIONS"
-            :key="item.symbol"
-            class="palette-btn"
-            size="small"
-            :type="drawTile === item.symbol ? 'primary' : 'default'"
-            @click="drawTile = item.symbol"
-          >
-            <span class="palette-row">
-              <span class="palette-swatch" :class="tileClass(item.symbol)">
-                <span v-if="isGoalTile(item.symbol)" class="goal-dot" />
-                <span v-if="isBoxTile(item.symbol)" class="box" />
-                <span v-if="isPlayerTile(item.symbol)" class="player" />
-              </span>
-              <span class="palette-label">{{ item.label }}</span>
-            </span>
-          </el-button>
-        </div>
-        <div class="size-actions">
-          <el-button size="small" @click="resizeGrid(addGrid, 'addRow')">新增行</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'removeRow')">减少行</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'addCol')">新增列</el-button>
-          <el-button size="small" @click="resizeGrid(addGrid, 'removeCol')">减少列</el-button>
-        </div>
-      </div>
-
-      <div
-        class="grid-board"
-        :style="{ gridTemplateColumns: `repeat(${addGrid[0]?.length ?? 1}, 32px)` }"
-        @mouseup="stopPaint"
-      >
-        <button
-          v-for="(tile, idx) in addGrid.flat()"
-          :key="idx"
-          class="grid-cell"
-          :class="[
-            tileClass(tile),
-            { immutable: isBorderCell(addGrid, Math.floor(idx / (addGrid[0]?.length || 1)), idx % (addGrid[0]?.length || 1)) },
-          ]"
-          type="button"
-          @mousedown="startPaint(addGrid, Math.floor(idx / (addGrid[0]?.length || 1)), idx % (addGrid[0]?.length || 1), $event)"
-          @mouseenter="continuePaint(addGrid, Math.floor(idx / (addGrid[0]?.length || 1)), idx % (addGrid[0]?.length || 1), $event)"
-          @mouseup="stopPaint"
-          @contextmenu="eraseCell(addGrid, Math.floor(idx / (addGrid[0]?.length || 1)), idx % (addGrid[0]?.length || 1), $event)"
-        >
-          <span v-if="isGoalTile(tile)" class="goal-dot" />
-          <span v-if="isBoxTile(tile)" class="box" />
-          <span v-if="isPlayerTile(tile)" class="player" />
-        </button>
-      </div>
-    </div>
-
-    <template #footer>
-      <el-button @click="addDialogVisible = false">取消</el-button>
-      <el-button type="success" :loading="saving" @click="saveNewLevel">新增并保存</el-button>
-    </template>
-  </el-dialog>
+  <SokobanLevelEditorDialog
+    v-model="addDialogVisible"
+    v-model:level-name="newLevelName"
+    v-model:grid="addGrid"
+    v-model:draw-tile="drawTile"
+    mode="add"
+    title="新增关卡"
+    :saving="saving"
+    @confirm="saveNewLevel"
+  />
 </template>
 
 <style scoped>
@@ -562,153 +297,6 @@ onUnmounted(() => {
 
 .level-meta small {
   color: var(--el-text-color-secondary);
-}
-
-.preview {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-}
-
-.dialog-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.tools {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.palette,
-.size-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.palette-btn :deep(.el-button__inner) {
-  display: inline-flex;
-  align-items: center;
-}
-
-.palette-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.palette-swatch {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  border: 1px solid var(--el-border-color);
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.palette-swatch .goal-dot {
-  width: 38%;
-  height: 38%;
-}
-
-.palette-swatch .box {
-  inset: 12%;
-}
-
-.palette-swatch .player {
-  inset: 18%;
-}
-
-.palette-label {
-  line-height: 1.2;
-}
-
-.grid-board {
-  display: grid;
-  gap: 4px;
-  overflow: auto;
-  padding: 8px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  max-height: 56vh;
-}
-
-.grid-cell {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.grid-cell.immutable {
-  cursor: not-allowed;
-  box-shadow: inset 0 0 0 1px #111827;
-}
-
-.tile-wall {
-  background: color-mix(in srgb, var(--text-h) 72%, #111827);
-}
-
-.tile-floor {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.tile-goal {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.tile-box {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.tile-player {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.tile-box-goal {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.tile-player-goal {
-  background: color-mix(in srgb, var(--border) 26%, transparent);
-}
-
-.goal-dot {
-  position: absolute;
-  width: 34%;
-  height: 34%;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 75%, #fbbf24);
-  z-index: 3;
-}
-
-.box,
-.player {
-  position: absolute;
-  border-radius: 6px;
-}
-
-.box {
-  inset: 14%;
-  background: #f59e0b;
-  border: 1px solid #b45309;
-  z-index: 2;
-}
-
-.player {
-  inset: 20%;
-  border-radius: 50%;
-  background: #2563eb;
-  border: 1px solid #1d4ed8;
-  z-index: 4;
 }
 
 @media (max-width: 720px) {
